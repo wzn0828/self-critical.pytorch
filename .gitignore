@@ -1,0 +1,8 @@
+Experiments/
+.idea
+__pycache__/
+__pycache__/*
+*/__pycache__/
+*.pyc
+code_src/data/annotations
+runs/
