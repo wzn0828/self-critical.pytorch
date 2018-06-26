@@ -19,7 +19,6 @@ parser.add_argument('--downloaded_feats', default='data/bu_data', help='download
 parser.add_argument('--output_dir', default='data/cocobu', help='output feature files')
 
 args = parser.parse_args()
-
 csv.field_size_limit(sys.maxsize)
 
 
@@ -28,6 +27,14 @@ infiles = ['trainval/karpathy_test_resnet101_faster_rcnn_genome.tsv',
           'trainval/karpathy_val_resnet101_faster_rcnn_genome.tsv',\
           'trainval/karpathy_train_resnet101_faster_rcnn_genome.tsv.0', \
            'trainval/karpathy_train_resnet101_faster_rcnn_genome.tsv.1']
+
+
+#----for my local set----#
+args.downloaded_feats = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36'
+args.output_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36'
+infiles =['trainval_resnet101_faster_rcnn_genome_36.tsv']
+#----for my local set----#
+
 
 os.makedirs(args.output_dir+'_att')
 os.makedirs(args.output_dir+'_fc')
