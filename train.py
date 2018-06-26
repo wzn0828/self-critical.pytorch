@@ -18,7 +18,7 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 from misc.rewards import init_scorer, get_self_critical_reward
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 try:
     import tensorboardX as tb
@@ -112,7 +112,7 @@ def train(opt):
         start = time.time()
         # Load data from train split (0)
         data = loader.get_batch('train')
-        print('Read data:', time.time() - start)
+        # print('Read data:', time.time() - start)
 
         torch.cuda.synchronize()
         start = time.time()
@@ -135,12 +135,13 @@ def train(opt):
         train_loss = loss.item()
         torch.cuda.synchronize()
         end = time.time()
-        if not sc_flag:
-            print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
-                .format(iteration, epoch, train_loss, end - start))
-        else:
-            print("iter {} (epoch {}), avg_reward = {:.3f}, time/batch = {:.3f}" \
-                .format(iteration, epoch, np.mean(reward[:,0]), end - start))
+        if iteration%10==0:
+            if not sc_flag:
+                print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
+                    .format(iteration, epoch, train_loss, end - start))
+            else:
+                print("iter {} (epoch {}), avg_reward = {:.3f}, time/batch = {:.3f}" \
+                    .format(iteration, epoch, np.mean(reward[:,0]), end - start))
 
         # Update the iteration and epoch
         iteration += 1
@@ -222,4 +223,26 @@ def train(opt):
             break
 
 opt = opts.parse_opt()
+
+
+#----for my local set----#
+opt.id = 'topdown'
+opt.caption_model = 'topdown'
+opt.input_json = 'data/cocotalk.json'
+opt.input_fc_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_fc'
+opt.input_att_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_att'
+opt.input_label_h5 = 'data/cocotalk_label.h5'
+opt.batch_size = 100
+opt.learning_rate = 5e-4
+opt.learning_rate_decay_rate = 0.85
+opt.learning_rate_decay_start = 0
+opt.scheduled_sampling_start = 0
+opt.checkpoint_path = 'Experiments/bottom-up-top-down'
+opt.save_checkpoint_every = 6000
+opt.val_images_use = 5000
+opt.max_epochs = 100
+opt.language_eval = 1
+#----for my local set----#
+
+
 train(opt)
