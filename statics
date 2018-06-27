@@ -1,0 +1,9 @@
+1\ len(vocab) = 9487;
+2\ total_images = 123287;   train_annos = 616767;
+3\ max sequence length is 16;
+4\  assigned 113287 images to split train;
+    assigned 5000 images to split val;
+    assigned 5000 images to split test.
+
+
+
