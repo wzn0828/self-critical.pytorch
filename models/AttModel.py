@@ -110,7 +110,7 @@ class AttModel(CaptionModel):
 
     def _forward(self, fc_feats, att_feats, seq, att_masks=None):
         batch_size = fc_feats.size(0)
-        state = self.init_hidden(batch_size)
+        state = self.init_hidden(batch_size)  # [num_layers, batchsize, rnn_size]
 
         outputs = fc_feats.new_zeros(batch_size, seq.size(1) - 1, self.vocab_size+1)
 
