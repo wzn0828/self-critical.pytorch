@@ -44,6 +44,9 @@ def setup(opt):
     # DenseAtt
     elif opt.caption_model == 'denseatt':
         model = DenseAttModel(opt)
+    # Top-down-sentinal attention model
+    elif opt.caption_model == 'topdownsentinal':
+        model = TopDownSentinalModel(opt)
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
 
