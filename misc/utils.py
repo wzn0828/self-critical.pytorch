@@ -55,13 +55,13 @@ class LanguageModelCriterion(nn.Module):
     def __init__(self):
         super(LanguageModelCriterion, self).__init__()
 
-    def forward(self, input, target, mask):
+    def forward(self, input, target, mask):     # input: batch*17*(vocab_size+1)
         # truncate to the same size
-        target = target[:, :input.size(1)]
-        mask =  mask[:, :input.size(1)]
+        target = target[:, :input.size(1)]      # batch*17
+        mask =  mask[:, :input.size(1)]     # batch*17
 
-        output = -input.gather(2, target.unsqueeze(2)).squeeze(2) * mask
-        output = torch.sum(output) / torch.sum(mask)
+        output = -input.gather(2, target.unsqueeze(2)).squeeze(2) * mask    # batch*17
+        output = torch.sum(output) / torch.sum(mask)    # scalar
 
         return output
 
