@@ -18,7 +18,7 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 from misc.rewards import init_scorer, get_self_critical_reward
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 try:
     import tensorboardX as tb
@@ -226,18 +226,18 @@ opt = opts.parse_opt()
 
 
 #----for my local set----#
-opt.id = 'topdown'
-opt.caption_model = 'topdown'
+opt.id = 'topdownsentinal'
+opt.caption_model = 'topdownsentinal'
 opt.input_json = 'data/cocotalk.json'
-opt.input_fc_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_fc'
-opt.input_att_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_att'
+opt.input_fc_dir = '/home/wzn/D/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_fc'
+opt.input_att_dir = '/home/wzn/D/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_att'
 opt.input_label_h5 = 'data/cocotalk_label.h5'
 opt.batch_size = 100
 opt.learning_rate = 5e-4
 opt.learning_rate_decay_rate = 0.85
 opt.learning_rate_decay_start = 0
 opt.scheduled_sampling_start = 0
-opt.checkpoint_path = 'Experiments/bottom-up-top-down-debug'
+opt.checkpoint_path = 'Experiments/top-down-sentinal'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
 opt.max_epochs = 100

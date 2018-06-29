@@ -86,7 +86,8 @@ class AttModel(CaptionModel):
     def init_hidden(self, bsz):
         weight = next(self.parameters())
         return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
-                weight.new_zeros(self.num_layers, bsz, self.rnn_size))
+                weight.new_zeros(self.num_layers, bsz, self.rnn_size),
+                weight.new_zeros(bsz, self.rnn_size))       # (h0, c0, sentinal)
 
     def clip_att(self, att_feats, att_masks):
         # Clip the length of att_masks and att_feats to the maximum length
@@ -109,13 +110,20 @@ class AttModel(CaptionModel):
         return fc_feats, att_feats, p_att_feats, att_masks
 
     def _forward(self, fc_feats, att_feats, seq, att_masks=None):
+        '''
+        :param fc_feats: size is [batch_size, 2048]
+        :param att_feats: size is [batch_size, num_att(36), 2048]
+        :param seq: labels, size is [batch_size, 18]
+        :param att_masks:
+        :return:
+        '''
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)  # [num_layers, batchsize, rnn_size]
 
-        outputs = fc_feats.new_zeros(batch_size, seq.size(1) - 1, self.vocab_size+1)
+        outputs = fc_feats.new_zeros(batch_size, seq.size(1) - 1, self.vocab_size+1) # [batch_size, 17, vocab_size+1]
 
         # Prepare the features
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks)
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks) # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
         # pp_att_feats is used for attention, we cache it in advance to reduce computation cost
 
         for i in range(seq.size(1) - 1):
@@ -138,17 +146,17 @@ class AttModel(CaptionModel):
             if i >= 1 and seq[:, i].sum() == 0:
                 break
 
-            output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)
+            output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
         return outputs
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, state):
         # 'it' contains a word index
-        xt = self.embed(it)
+        xt = self.embed(it)     # [batch_size, input_encoding_size]
 
-        output, state = self.core(xt, fc_feats, att_feats, p_att_feats, state, att_masks)
-        logprobs = F.log_softmax(self.logit(output), dim=1)
+        output, state = self.core(xt, fc_feats, att_feats, p_att_feats, state, att_masks)   # batch*rn_size
+        logprobs = F.log_softmax(self.logit(output), dim=1)     # batch*(vocab_size+1)
 
         return logprobs, state
 
@@ -193,17 +201,17 @@ class AttModel(CaptionModel):
             return self._sample_beam(fc_feats, att_feats, att_masks, opt)
 
         batch_size = fc_feats.size(0)
-        state = self.init_hidden(batch_size)
+        state = self.init_hidden(batch_size)    # (2*batch*rnn_size, 2*batch*rnn_size)
 
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks)
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks)  # batch*rnn_size, batch*36*rnn_size, batch*36*att_hid_size
 
-        seq = fc_feats.new_zeros((batch_size, self.seq_length), dtype=torch.long)
-        seqLogprobs = fc_feats.new_zeros(batch_size, self.seq_length)
+        seq = fc_feats.new_zeros((batch_size, self.seq_length), dtype=torch.long)   # batch*16
+        seqLogprobs = fc_feats.new_zeros(batch_size, self.seq_length)   # batch*16
         for t in range(self.seq_length + 1):
             if t == 0: # input <bos>
                 it = fc_feats.new_zeros(batch_size, dtype=torch.long)
 
-            logprobs, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)
+            logprobs, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)    # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
             
             if decoding_constraint and t > 0:
                 tmp = logprobs.new_zeros(logprobs.size())
@@ -414,23 +422,61 @@ class TopDownCore(nn.Module):
         self.attention = Attention(opt)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
-        prev_h = state[0][-1]
-        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
 
-        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
 
         att = self.attention(h_att, att_feats, p_att_feats, att_masks)
 
-        lang_lstm_input = torch.cat([att, h_att], 1)
+        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
-        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
 
         output = F.dropout(h_lang, self.drop_prob_lm, self.training)
         state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
         return output, state
 
+class TopDownSentinalCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownSentinalCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
+        self.attention = AttentionSentinal(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        sentinal = state[2] # [batch_size, rnn_size]
+
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        att = self.attention(h_att, att_feats, p_att_feats, sentinal, att_masks)  # h, att_feats, p_att_feats, sentinal, att_masks=None
+
+        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate sentinal--------#
+        ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        state = state + (sentinal,)
+        #--end-------generate sentinal--------#
+
+        return output, state
 
 ############################################################################
 # Notice:
@@ -519,8 +565,8 @@ class Attention(nn.Module):
 
     def forward(self, h, att_feats, p_att_feats, att_masks=None):
         # The p_att_feats here is already projected
-        att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)
-        att = p_att_feats.view(-1, att_size, self.att_hid_size)
+        att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)     # 36
+        att = p_att_feats.view(-1, att_size, self.att_hid_size)     # [batch_size, 36, att_hid_size]
         
         att_h = self.h2att(h)                        # batch * att_hid_size
         att_h = att_h.unsqueeze(1).expand_as(att)            # batch * att_size * att_hid_size
@@ -534,10 +580,59 @@ class Attention(nn.Module):
         if att_masks is not None:
             weight = weight * att_masks.view(-1, att_size).float()
             weight = weight / weight.sum(1, keepdim=True) # normalize to 1
-        att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1)) # batch * att_size * att_feat_size
-        att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1) # batch * att_feat_size
+        att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1))       # batch * att_size * rnn_size
+        att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1)     # batch * rnn_size
 
         return att_res
+
+class AttentionSentinal(nn.Module):
+    def __init__(self, opt):
+        super(AttentionSentinal, self).__init__()
+        self.rnn_size = opt.rnn_size
+        self.att_hid_size = opt.att_hid_size
+
+        self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+
+        # ----sentinal attention-----#
+        self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+    def forward(self, h, att_feats, p_att_feats, sentinal, att_masks=None):
+        # The p_att_feats here is already projected
+        att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)  # 36
+        att = p_att_feats.view(-1, att_size, self.att_hid_size)  # [batch_size, 36, att_hid_size]
+
+        att_h = self.h2att(h)  # batch * att_hid_size
+        att_h = att_h.unsqueeze(1).expand_as(att)  # batch * att_size * att_hid_size
+        dot = att + att_h  # batch * att_size * att_hid_size
+        dot = F.tanh(dot)  # batch * att_size * att_hid_size
+        dot = dot.view(-1, self.att_hid_size)  # (batch * att_size) * att_hid_size
+        dot = self.alpha_net(dot)  # (batch * att_size) * 1
+        dot = dot.view(-1, att_size)  # batch * att_size
+
+        weight = F.softmax(dot, dim=1)  # batch * (att_size)
+        if att_masks is not None:
+            weight = weight * att_masks.view(-1, att_size).float()
+            weight = weight / weight.sum(1, keepdim=True)  # normalize to 1
+        att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1))  # batch * att_size * rnn_size
+        att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1)  # batch * rnn_size
+
+        #--start----sentinal attention-----#
+        att_h = self.h2att(h)  # batch * att_hid_size
+        att_senti = self.senti2att(sentinal)    # batch * att_hid_size
+        dot_senti = att_senti + att_h   # batch * att_hid_size
+        dot_senti = F.tanh(dot_senti)   # batch * att_hid_size
+        dot_senti = dot_senti.view(-1, self.att_hid_size)  # batch * att_hid_size
+        dot_senti = self.alpha_net(dot_senti)  # batch * 1
+
+        dot_union = torch.cat([dot, dot_senti], 1)  # batch * (att_size+1)
+        weight_senti = F.softmax(dot_union, dim=1)  # batch * (att_size+1)
+        beta = weight_senti[:, -1]  # batch
+        beta = beta.unsqueeze(1)    # batch * 1
+        att_res_senti = (1 - beta) * att_res + beta * sentinal  # batch * rnn_size
+        # --end----sentinal attention-----#
+
+        return att_res_senti    # batch * rnn_size
 
 class Att2in2Core(nn.Module):
     def __init__(self, opt):
@@ -662,6 +757,12 @@ class TopDownModel(AttModel):
         super(TopDownModel, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownCore(opt)
+
+class TopDownSentinalModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownSentinalModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownSentinalCore(opt)
 
 class StackAttModel(AttModel):
     def __init__(self, opt):

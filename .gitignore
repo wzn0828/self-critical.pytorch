@@ -8,3 +8,5 @@ code_src/data/annotations
 runs/
 data/
 eval_results/
+cider/
+coco-caption/
