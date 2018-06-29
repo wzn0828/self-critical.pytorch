@@ -226,8 +226,8 @@ opt = opts.parse_opt()
 
 
 #----for my local set----#
-opt.id = 'topdown'
-opt.caption_model = 'topdown'
+opt.id = 'topdownsentinal'
+opt.caption_model = 'topdownsentinal'
 opt.input_json = 'data/cocotalk.json'
 opt.input_fc_dir = '/home/wzn/D/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_fc'
 opt.input_att_dir = '/home/wzn/D/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_att'
@@ -237,7 +237,7 @@ opt.learning_rate = 5e-4
 opt.learning_rate_decay_rate = 0.85
 opt.learning_rate_decay_start = 0
 opt.scheduled_sampling_start = 0
-opt.checkpoint_path = 'Experiments/bottom-up-top-down-debug'
+opt.checkpoint_path = 'Experiments/top-down-sentinal'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
 opt.max_epochs = 100
