@@ -487,9 +487,9 @@ class TopDownRecurrentHiddenCore(nn.Module):
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
         self.attention = AttentionRecurrent(opt)
 
-        #-------generate sentinal--------#
-        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
-        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        # #-------generate sentinal--------#
+        # self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        # self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
