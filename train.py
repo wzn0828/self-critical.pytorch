@@ -226,8 +226,8 @@ opt = opts.parse_opt()
 
 
 #----for my local set----#
-opt.id = 'topdownsentinal'
-opt.caption_model = 'topdownsentinal'
+opt.id = 'topdown_recurrent_hidden'
+opt.caption_model = 'topdown_recurrent_hidden'
 opt.input_json = 'data/cocotalk.json'
 opt.input_fc_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_fc'
 opt.input_att_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_att'
@@ -237,7 +237,7 @@ opt.learning_rate = 5e-4
 opt.learning_rate_decay_rate = 0.85
 opt.learning_rate_decay_start = 0
 opt.scheduled_sampling_start = 0
-opt.checkpoint_path = 'Experiments/top-down-sentinal'
+opt.checkpoint_path = 'Experiments/top-down-recurrent-hidden'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
 opt.max_epochs = 100

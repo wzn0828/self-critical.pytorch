@@ -87,7 +87,7 @@ class AttModel(CaptionModel):
         weight = next(self.parameters())
         return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
                 weight.new_zeros(self.num_layers, bsz, self.rnn_size),
-                weight.new_zeros(bsz, self.rnn_size))       # (h0, c0, sentinal)
+                weight.new_zeros(bsz, 1, self.rnn_size))       # (h0, c0, sentinal)
 
     def clip_att(self, att_feats, att_masks):
         # Clip the length of att_masks and att_feats to the maximum length
@@ -446,14 +446,14 @@ class TopDownSentinalCore(nn.Module):
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
-        self.attention = AttentionSentinal(opt)
+        self.attention = AttentionRecurrent(opt)
 
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
-        sentinal = state[2] # [batch_size, rnn_size]
+        sentinal = state[2] # [batch_size, 1, rnn_size]
 
         prev_h = state[0][-1]       # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
@@ -473,8 +473,88 @@ class TopDownSentinalCore(nn.Module):
         #--start-------generate sentinal--------#
         ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
         sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
-        state = state + (sentinal,)
+        state = state + (sentinal.unsqueeze(1),)
         #--end-------generate sentinal--------#
+
+        return output, state
+
+class TopDownRecurrentHiddenCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownRecurrentHiddenCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
+        self.attention = AttentionRecurrent(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
+
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        att = self.attention(h_att, att_feats, p_att_feats, sentinal, att_masks)  # h, att_feats, p_att_feats, sentinal, att_masks=None
+
+        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate recurrent--------#
+        # ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        # sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        sentinal = torch.cat([sentinal, h_lang.unsqueeze(1)], 1)    # [batch_size, num_recurrent + 1, rnn_size]
+        state = state + (sentinal, )
+        #--end-------generate recurrent--------#
+
+        return output, state
+
+class TopDownRecurrentSentinalCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownRecurrentSentinalCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
+        self.attention = AttentionRecurrent(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
+
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        att = self.attention(h_att, att_feats, p_att_feats, sentinal, att_masks)  # h, att_feats, p_att_feats, sentinal, att_masks=None
+
+        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate recurrent--------#
+        ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        sentinal_current = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        sentinal = torch.cat([sentinal, sentinal_current.unsqueeze(1)], 1)    # [batch_size, num_recurrent + 1, rnn_size]
+        state = state + (sentinal, )
+        #--end-------generate recurrent--------#
 
         return output, state
 
@@ -585,9 +665,9 @@ class Attention(nn.Module):
 
         return att_res
 
-class AttentionSentinal(nn.Module):
+class AttentionRecurrent(nn.Module):
     def __init__(self, opt):
-        super(AttentionSentinal, self).__init__()
+        super(AttentionRecurrent, self).__init__()
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
 
@@ -599,6 +679,7 @@ class AttentionSentinal(nn.Module):
 
     def forward(self, h, att_feats, p_att_feats, sentinal, att_masks=None):
         # The p_att_feats here is already projected
+        num_hidden = sentinal.size(1)
         att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)  # 36
         att = p_att_feats.view(-1, att_size, self.att_hid_size)  # [batch_size, 36, att_hid_size]
 
@@ -617,20 +698,23 @@ class AttentionSentinal(nn.Module):
         att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1))  # batch * att_size * rnn_size
         att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1)  # batch * rnn_size
 
-        #--start----sentinal attention-----#
+        #--start----recurrent attention (including sentinal attention, recurrent hidden attention, recurrent sentinal attention)-----#
         att_h = self.h2att(h)  # batch * att_hid_size
-        att_senti = self.senti2att(sentinal)    # batch * att_hid_size
-        dot_senti = att_senti + att_h   # batch * att_hid_size
-        dot_senti = F.tanh(dot_senti)   # batch * att_hid_size
-        dot_senti = dot_senti.view(-1, self.att_hid_size)  # batch * att_hid_size
-        dot_senti = self.alpha_net(dot_senti)  # batch * 1
+        att_senti = self.senti2att(sentinal)    # batch * num_hidden * att_hid_size
+        att_h = att_h.unsqueeze(1).expand_as(att_senti)  # batch * num_hidden * att_hid_size
+        dot_senti = att_senti + att_h   # batch * num_hidden * att_hid_size
+        dot_senti = F.tanh(dot_senti)   # batch * num_hidden * att_hid_size
+        dot_senti = dot_senti.view(-1, self.att_hid_size)  # (batch*num_hidden) * att_hid_size
+        dot_senti = self.alpha_net(dot_senti)  # (batch*num_hidden) * 1
+        dot_senti = dot_senti.view(-1, num_hidden)  # batch * num_hidden
 
-        dot_union = torch.cat([dot, dot_senti], 1)  # batch * (att_size+1)
-        weight_senti = F.softmax(dot_union, dim=1)  # batch * (att_size+1)
-        beta = weight_senti[:, -1]  # batch
-        beta = beta.unsqueeze(1)    # batch * 1
-        att_res_senti = (1 - beta) * att_res + beta * sentinal  # batch * rnn_size
-        # --end----sentinal attention-----#
+        dot_union = torch.cat([dot, dot_senti], 1)  # batch * (att_size+num_hidden)
+        weight_senti = F.softmax(dot_union, dim=1)  # batch * (att_size+num_hidden)
+        beta = weight_senti[:, att_size:]   # batch * num_hidden
+        beta = beta.unsqueeze(1)    # batch * 1 * num_hidden
+        beta_sum = beta.sum(2) # batch * 1
+        att_res_senti = (1 - beta_sum) * att_res + torch.bmm(beta, sentinal).squeeze(1)  # batch * rnn_size
+        # --end----recurrent attention-----#
 
         return att_res_senti    # batch * rnn_size
 
@@ -763,6 +847,18 @@ class TopDownSentinalModel(AttModel):
         super(TopDownSentinalModel, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownSentinalCore(opt)
+
+class TopDownRecurrentHiddenModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownRecurrentHiddenModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownRecurrentHiddenCore(opt)
+
+class TopDownRecurrentSentinalModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownRecurrentSentinalModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownRecurrentSentinalCore(opt)
 
 class StackAttModel(AttModel):
     def __init__(self, opt):
