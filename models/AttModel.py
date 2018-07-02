@@ -451,6 +451,9 @@ class TopDownSentinalCore(nn.Module):
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.sentinal_embed = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                            nn.ReLU(),
+                                            nn.Dropout(self.drop_prob_lm))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, 1, rnn_size]
@@ -473,7 +476,7 @@ class TopDownSentinalCore(nn.Module):
         #--start-------generate sentinal--------#
         ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
         sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
-        state = state + (sentinal.unsqueeze(1),)
+        state = state + (self.sentinal_embed(sentinal.unsqueeze(1)),)
         #--end-------generate sentinal--------#
 
         return output, state
