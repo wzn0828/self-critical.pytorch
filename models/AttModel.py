@@ -488,8 +488,9 @@ class TopDownRecurrentHiddenCore(nn.Module):
         self.attention = AttentionRecurrent(opt)
 
         # #-------generate sentinal--------#
-        # self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
-        # self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.sentinal_embed = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                    nn.ReLU(),
+                                    nn.Dropout(self.drop_prob_lm))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
@@ -512,7 +513,7 @@ class TopDownRecurrentHiddenCore(nn.Module):
         #--start-------generate recurrent--------#
         # ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
         # sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
-        sentinal = torch.cat([sentinal, h_lang.unsqueeze(1)], 1)    # [batch_size, num_recurrent + 1, rnn_size]
+        sentinal = torch.cat([sentinal, self.sentinal_embed(h_lang.unsqueeze(1))], 1)    # [batch_size, num_recurrent + 1, rnn_size]
         state = state + (sentinal, )
         #--end-------generate recurrent--------#
 
@@ -530,6 +531,9 @@ class TopDownRecurrentSentinalCore(nn.Module):
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.sentinal_embed = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                            nn.ReLU(),
+                                            nn.Dropout(self.drop_prob_lm))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
@@ -552,7 +556,7 @@ class TopDownRecurrentSentinalCore(nn.Module):
         #--start-------generate recurrent--------#
         ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
         sentinal_current = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
-        sentinal = torch.cat([sentinal, sentinal_current.unsqueeze(1)], 1)    # [batch_size, num_recurrent + 1, rnn_size]
+        sentinal = torch.cat([sentinal, self.sentinal_embed(sentinal_current.unsqueeze(1))], 1)    # [batch_size, num_recurrent + 1, rnn_size]
         state = state + (sentinal, )
         #--end-------generate recurrent--------#
 
