@@ -451,7 +451,7 @@ class TopDownCore(nn.Module):
 
 class TopDownOriginalCore(TopDownCore):
     def __init__(self, opt, use_maxout=False):
-        super(TopDownOriginalCore, self).__init__()
+        super(TopDownOriginalCore, self).__init__(opt)
         self.att_lstm = nn.LSTMCell(opt.rnn_size + opt.fc_feat_size + opt.input_encoding_size, opt.rnn_size) # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.fc_feat_size + opt.rnn_size, opt.rnn_size) # h^1_t, \hat v
 
@@ -877,7 +877,7 @@ class TopDownModel(AttModel):
 class TopDownOriginalModel(AttModel):
     def __init__(self, opt):
         super(TopDownOriginalModel, self).__init__(opt)
-        self.ctx2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+        self.ctx2att = nn.Linear(self.att_feat_size, self.att_hid_size, bias=False)
         self.embed = nn.Sequential(nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
                                    nn.Dropout(self.drop_prob_lm))
         self.num_layers = 2
