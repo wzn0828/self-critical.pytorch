@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 import numpy as np
-
+import math
 import time
 import os
 from six.moves import cPickle
@@ -18,7 +18,7 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 from misc.rewards import init_scorer, get_self_critical_reward
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 try:
     import tensorboardX as tb
@@ -87,13 +87,14 @@ def train(opt):
     while True:
         if update_lr_flag:
                 # Assign the learning rate
-            if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
-                frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
-                decay_factor = opt.learning_rate_decay_rate  ** frac
-                opt.current_lr = opt.learning_rate * decay_factor
-            else:
-                opt.current_lr = opt.learning_rate
-            utils.set_lr(optimizer, opt.current_lr)
+            # if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
+            #     frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
+            #     decay_factor = opt.learning_rate_decay_rate  ** frac
+            #     opt.current_lr = opt.learning_rate * decay_factor
+            # else:
+            #     opt.current_lr = opt.learning_rate
+            # utils.set_lr(optimizer, opt.current_lr)
+
             # Assign the scheduled sampling prob
             if epoch > opt.scheduled_sampling_start and opt.scheduled_sampling_start >= 0:
                 frac = (epoch - opt.scheduled_sampling_start) // opt.scheduled_sampling_increase_every
@@ -108,6 +109,9 @@ def train(opt):
                 sc_flag = False
 
             update_lr_flag = False
+
+        opt.current_lr = opt.learning_rate * ((1 - float(iteration) / opt.max_iter) ** opt.power)
+        utils.set_lr(optimizer, opt.current_lr)
                 
         start = time.time()
         # Load data from train split (0)
@@ -222,25 +226,41 @@ def train(opt):
         if epoch >= opt.max_epochs and opt.max_epochs != -1:
             break
 
+        if iteration >= opt.max_iter:
+            break
+
 opt = opts.parse_opt()
 
 
 #----for my local set----#
-opt.id = 'topdown_recurrent_hidden'
-opt.caption_model = 'topdown_recurrent_hidden'
+# net
+opt.id = 'topdown_original'
+opt.caption_model = 'topdown_original'
+opt.rnn_size = 1000
+opt.input_encoding_size = 1000
+opt.drop_prob_lm = 0
+opt.beam_size = 1
+
+# data
 opt.input_json = 'data/cocotalk.json'
 opt.input_fc_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_fc'
 opt.input_att_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_att'
 opt.input_label_h5 = 'data/cocotalk_label.h5'
-opt.batch_size = 100
-opt.learning_rate = 5e-4
-opt.learning_rate_decay_rate = 0.85
-opt.learning_rate_decay_start = 0
+
+# optimization
+opt.batch_size = 20
+opt.optim = 'sgdm'
+opt.learning_rate = 0.01
+opt.optim_alpha = 0.9
+opt.max_iter = 60000
+opt.power = 1
+opt.weight_decay = 0.0005
+
 opt.scheduled_sampling_start = 0
-opt.checkpoint_path = 'Experiments/top-down-recurrent-hidden'
+opt.checkpoint_path = 'Experiments/bottom-up-top-down-original'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
-opt.max_epochs = 100
+opt.max_epochs = math.ceil(60000.0/(113287/opt.batch_size))
 opt.language_eval = 1
 #----for my local set----#
 
