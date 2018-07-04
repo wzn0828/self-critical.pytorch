@@ -139,6 +139,9 @@ def train(opt):
         train_loss = loss.item()
         torch.cuda.synchronize()
         end = time.time()
+
+        # Update the iteration
+        iteration += 1
         if iteration%10==0:
             if not sc_flag:
                 print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
@@ -147,8 +150,7 @@ def train(opt):
                 print("iter {} (epoch {}), avg_reward = {:.3f}, time/batch = {:.3f}" \
                     .format(iteration, epoch, np.mean(reward[:,0]), end - start))
 
-        # Update the iteration and epoch
-        iteration += 1
+        # Update the epoch
         if data['bounds']['wrapped']:
             epoch += 1
             update_lr_flag = True
@@ -260,7 +262,7 @@ opt.scheduled_sampling_start = 0
 opt.checkpoint_path = 'Experiments/bottom-up-top-down-original'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
-opt.max_epochs = math.ceil(60000.0/(113287/opt.batch_size))
+opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
 opt.language_eval = 1
 #----for my local set----#
 
