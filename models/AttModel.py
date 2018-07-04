@@ -22,7 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import misc.utils as utils
 from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
-
+from models import model_utils
 from .CaptionModel import CaptionModel
 
 def sort_pack_padded_sequence(input, lengths):
@@ -82,6 +82,12 @@ class AttModel(CaptionModel):
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in range(opt.logit_layers - 1)]
             self.logit = nn.Sequential(*(reduce(lambda x,y:x+y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1)]))
         self.ctx2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+        # initialization
+        nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
+        model_utils.kaiming_normal('relu', 0, self.fc_embed[0], filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0], self.logit)
+        model_utils.xavier_uniform('tanh', self.ctx2att)
+
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
@@ -421,6 +427,10 @@ class TopDownCore(nn.Module):
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
         self.attention = Attention(opt)
 
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         prev_h = state[0][-1]       # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
@@ -438,6 +448,17 @@ class TopDownCore(nn.Module):
         state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
         return output, state
+
+class TopDownOriginalCore(TopDownCore):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownOriginalCore, self).__init__()
+        self.att_lstm = nn.LSTMCell(opt.rnn_size + opt.fc_feat_size + opt.input_encoding_size, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.fc_feat_size + opt.rnn_size, opt.rnn_size) # h^1_t, \hat v
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+
 
 class TopDownSentinalCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
@@ -650,6 +671,10 @@ class Attention(nn.Module):
         self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
         self.alpha_net = nn.Linear(self.att_hid_size, 1)
 
+        # initialization
+        model_utils.xavier_uniform('tanh', self.h2att)
+        model_utils.kaiming_normal('relu', 0, self.alpha_net)
+
     def forward(self, h, att_feats, p_att_feats, att_masks=None):
         # The p_att_feats here is already projected
         att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)     # 36
@@ -848,6 +873,37 @@ class TopDownModel(AttModel):
         super(TopDownModel, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownCore(opt)
+
+class TopDownOriginalModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownOriginalModel, self).__init__(opt)
+        self.ctx2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+        self.embed = nn.Sequential(nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
+                                   nn.Dropout(self.drop_prob_lm))
+        self.num_layers = 2
+        self.core = TopDownOriginalCore(opt)
+
+        # initialization
+        model_utils.xavier_uniform('tanh', self.ctx2att)
+        nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
+
+    def _prepare_feature(self, fc_feats, att_feats, att_masks):
+        att_feats, att_masks = self.clip_att(att_feats, att_masks)
+
+        # PackedSequence att feats
+        att_feats = self.pack_wrapper(att_feats, att_masks)
+
+        # Project the attention feats first to reduce memory and computation comsumptions.
+        p_att_feats = self.ctx2att(att_feats)
+
+        return fc_feats, att_feats, p_att_feats, att_masks
+
+    def pack_wrapper(self, att_feats, att_masks):
+        if att_masks is not None:
+            packed, inv_ix = sort_pack_padded_sequence(att_feats, att_masks.data.long().sum(1))
+            return pad_unsort_packed_sequence(PackedSequence(packed[0], packed[1]), inv_ix)
+        else:
+            return att_feats
 
 class TopDownSentinalModel(AttModel):
     def __init__(self, opt):
