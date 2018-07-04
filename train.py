@@ -146,7 +146,6 @@ def train(opt):
         torch.cuda.synchronize()
         end = time.time()
 
-
         if iteration%10==0:
             if not sc_flag:
                 print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
@@ -246,7 +245,6 @@ opt.caption_model = 'topdown_original'
 opt.rnn_size = 1000
 opt.input_encoding_size = 1000
 opt.drop_prob_lm = 0
-opt.beam_size = 1
 
 # data
 opt.input_json = 'data/cocotalk.json'
@@ -263,8 +261,8 @@ opt.max_iter = 60000
 opt.power = 1
 opt.weight_decay = 0.0005
 opt.grad_max_norm = 10
+opt.beam_size = 1
 
-opt.scheduled_sampling_start = 0
 opt.checkpoint_path = 'Experiments/bottom-up-top-down-original'
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
