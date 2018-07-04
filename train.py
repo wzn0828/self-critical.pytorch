@@ -112,6 +112,9 @@ def train(opt):
 
         opt.current_lr = opt.learning_rate * ((1 - float(iteration) / opt.max_iter) ** opt.power)
         utils.set_lr(optimizer, opt.current_lr)
+
+        # Update the iteration
+        iteration += 1
                 
         start = time.time()
         # Load data from train split (0)
@@ -134,14 +137,16 @@ def train(opt):
             loss = rl_crit(sample_logprobs, gen_result.data, torch.from_numpy(reward).float().cuda())
 
         loss.backward()
-        utils.clip_gradient(optimizer, opt.grad_clip)
+        # utils.clip_gradient(optimizer, opt.grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), opt.grad_max_norm)
+        add_summary_value(tb_summary_writer, 'grad_L2_norm', grad_norm, iteration)
+
         optimizer.step()
         train_loss = loss.item()
         torch.cuda.synchronize()
         end = time.time()
 
-        # Update the iteration
-        iteration += 1
+
         if iteration%10==0:
             if not sc_flag:
                 print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
@@ -257,6 +262,7 @@ opt.optim_alpha = 0.9
 opt.max_iter = 60000
 opt.power = 1
 opt.weight_decay = 0.0005
+opt.grad_max_norm = 10
 
 opt.scheduled_sampling_start = 0
 opt.checkpoint_path = 'Experiments/bottom-up-top-down-original'
