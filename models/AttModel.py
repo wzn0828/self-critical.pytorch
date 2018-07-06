@@ -452,11 +452,22 @@ class TopDownCore(nn.Module):
 class TopDownOriginalCore(TopDownCore):
     def __init__(self, opt, use_maxout=False):
         super(TopDownOriginalCore, self).__init__(opt)
+        del self.att_lstm, self.lang_lstm
         self.att_lstm = nn.LSTMCell(opt.rnn_size + opt.fc_feat_size + opt.input_encoding_size, opt.rnn_size) # we, fc, h^2_t-1
-        self.lang_lstm = nn.LSTMCell(opt.fc_feat_size + opt.rnn_size, opt.rnn_size) # h^1_t, \hat v
+        self.lang_lstm = nn.LSTMCell(opt.att_feat_size + opt.rnn_size, opt.rnn_size) # h^1_t, \hat v
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+
+
+class TopDownOriginal2Core(TopDownOriginalCore):
+    def __init__(self, opt):
+        super(TopDownOriginal2Core, self).__init__(opt)
+        del self.lang_lstm
+        self.lang_lstm = nn.LSTMCell(2*opt.rnn_size, opt.rnn_size) # h^1_t, \hat v
+
+        # initialization
         model_utils.lstm_init(self.lang_lstm)
 
 
@@ -877,33 +888,27 @@ class TopDownModel(AttModel):
 class TopDownOriginalModel(AttModel):
     def __init__(self, opt):
         super(TopDownOriginalModel, self).__init__(opt)
+        del self.embed, self.fc_embed, self.att_embed
+        self.embed = nn.Embedding(self.vocab_size + 1, self.input_encoding_size)
+        self.fc_embed = self.att_embed = lambda x: x
+        del self.ctx2att
         self.ctx2att = nn.Linear(self.att_feat_size, self.att_hid_size, bias=False)
-        self.embed = nn.Sequential(nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
-                                   nn.Dropout(self.drop_prob_lm))
+
         self.num_layers = 2
         self.core = TopDownOriginalCore(opt)
 
         # initialization
         model_utils.xavier_uniform('tanh', self.ctx2att)
-        nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
+        nn.init.normal_(self.embed.weight, mean=0, std=0.01)
 
-    def _prepare_feature(self, fc_feats, att_feats, att_masks):
-        att_feats, att_masks = self.clip_att(att_feats, att_masks)
 
-        # PackedSequence att feats
-        att_feats = self.pack_wrapper(att_feats, att_masks)
-
-        # Project the attention feats first to reduce memory and computation comsumptions.
-        p_att_feats = self.ctx2att(att_feats)
-
-        return fc_feats, att_feats, p_att_feats, att_masks
-
-    def pack_wrapper(self, att_feats, att_masks):
-        if att_masks is not None:
-            packed, inv_ix = sort_pack_padded_sequence(att_feats, att_masks.data.long().sum(1))
-            return pad_unsort_packed_sequence(PackedSequence(packed[0], packed[1]), inv_ix)
-        else:
-            return att_feats
+class TopDownOriginal2Model(AttModel):
+    def __init__(self, opt):
+        super(TopDownOriginal2Model, self).__init__(opt)
+        delattr(self, 'fc_embed')
+        self.fc_embed = lambda x: x
+        self.num_layers = 2
+        self.core = TopDownOriginal2Core(opt)
 
 class TopDownSentinalModel(AttModel):
     def __init__(self, opt):
@@ -951,3 +956,7 @@ class Att2inModel(AttModel):
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.logit.bias.data.fill_(0)
         self.logit.weight.data.uniform_(-initrange, initrange)
+
+
+
+

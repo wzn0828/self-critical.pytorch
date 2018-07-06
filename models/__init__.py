@@ -53,6 +53,8 @@ def setup(opt):
         model = TopDownRecurrentSentinalModel(opt)
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
+    elif opt.caption_model == 'topdown_original_2':
+        model = TopDownOriginal2Model(opt)
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
 
