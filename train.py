@@ -45,7 +45,11 @@ def train(opt):
     histories = {}
     if opt.start_from is not None:
         # open old infos and check if models are compatible
-        with open(os.path.join(opt.start_from, 'infos_'+opt.id+'.pkl')) as f:
+        if opt.load_best:
+            info_path = os.path.join(opt.start_from, 'infos_' + opt.id + '-best.pkl')
+        else:
+            info_path = os.path.join(opt.start_from, 'infos_' + opt.id + '.pkl')
+        with open(info_path) as f:
             infos = cPickle.load(f)
             saved_model_opt = infos['opt']
             need_be_same=["caption_model", "rnn_type", "rnn_size", "num_layers"]
@@ -81,7 +85,7 @@ def train(opt):
 
     optimizer = utils.build_optimizer(model.parameters(), opt)
     # Load the optimizer
-    if vars(opt).get('start_from', None) is not None and os.path.isfile(os.path.join(opt.start_from,"optimizer.pth")):
+    if vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
 
     while True:

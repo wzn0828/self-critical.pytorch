@@ -113,7 +113,9 @@ def parse_opt():
     parser.add_argument('--losses_log_every', type=int, default=25,
                     help='How often do we snapshot losses, for inclusion in the progress dump? (0 = disable)')       
     parser.add_argument('--load_best_score', type=int, default=1,
-                    help='Do we load previous best score when resuming training.')       
+                    help='Do we load previous best score when resuming training.')
+    parser.add_argument('--load_best', type=int, default=0,
+                    help='Do we load previous best model? (0 = disable)')
 
     # misc
     parser.add_argument('--id', type=str, default='',
