@@ -45,7 +45,11 @@ def train(opt):
     histories = {}
     if opt.start_from is not None:
         # open old infos and check if models are compatible
-        with open(os.path.join(opt.start_from, 'infos_'+opt.id+'.pkl')) as f:
+        if opt.load_best:
+            info_path = os.path.join(opt.start_from, 'infos_' + opt.id + '-best.pkl')
+        else:
+            info_path = os.path.join(opt.start_from, 'infos_' + opt.id + '.pkl')
+        with open(info_path) as f:
             infos = cPickle.load(f)
             saved_model_opt = infos['opt']
             need_be_same=["caption_model", "rnn_type", "rnn_size", "num_layers"]
@@ -81,19 +85,19 @@ def train(opt):
 
     optimizer = utils.build_optimizer(model.parameters(), opt)
     # Load the optimizer
-    if vars(opt).get('start_from', None) is not None and os.path.isfile(os.path.join(opt.start_from,"optimizer.pth")):
+    if vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
 
     while True:
         if update_lr_flag:
-                # Assign the learning rate
-            # if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
-            #     frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
-            #     decay_factor = opt.learning_rate_decay_rate  ** frac
-            #     opt.current_lr = opt.learning_rate * decay_factor
-            # else:
-            #     opt.current_lr = opt.learning_rate
-            # utils.set_lr(optimizer, opt.current_lr)
+            # Assign the learning rate
+            if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
+                frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
+                decay_factor = opt.learning_rate_decay_rate  ** frac
+                opt.current_lr = opt.learning_rate * decay_factor
+            else:
+                opt.current_lr = opt.learning_rate
+            utils.set_lr(optimizer, opt.current_lr)
 
             # Assign the scheduled sampling prob
             if epoch > opt.scheduled_sampling_start and opt.scheduled_sampling_start >= 0:
@@ -110,8 +114,8 @@ def train(opt):
 
             update_lr_flag = False
 
-        opt.current_lr = opt.learning_rate * ((1 - float(iteration) / opt.max_iter) ** opt.power)
-        utils.set_lr(optimizer, opt.current_lr)
+        # opt.current_lr = opt.learning_rate * ((1 - float(iteration) / opt.max_iter) ** opt.power)
+        # utils.set_lr(optimizer, opt.current_lr)
 
         # Update the iteration
         iteration += 1
@@ -137,9 +141,9 @@ def train(opt):
             loss = rl_crit(sample_logprobs, gen_result.data, torch.from_numpy(reward).float().cuda())
 
         loss.backward()
-        # utils.clip_gradient(optimizer, opt.grad_clip)
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), opt.grad_max_norm)
-        add_summary_value(tb_summary_writer, 'grad_L2_norm', grad_norm, iteration)
+        utils.clip_gradient(optimizer, opt.grad_clip)
+        # grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), opt.grad_max_norm)
+        # add_summary_value(tb_summary_writer, 'grad_L2_norm', grad_norm, iteration)
 
         optimizer.step()
         train_loss = loss.item()
