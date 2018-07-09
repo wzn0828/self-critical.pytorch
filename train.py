@@ -62,6 +62,8 @@ def train(opt):
 
     iteration = infos.get('iter', 0)
     epoch = infos.get('epoch', 0)
+    if opt.load_best:
+        opt.self_critical_after = epoch
 
     val_result_history = histories.get('val_result_history', {})
     loss_history = histories.get('loss_history', {})
