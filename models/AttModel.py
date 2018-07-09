@@ -471,9 +471,9 @@ class TopDownOriginal2Core(TopDownOriginalCore):
         model_utils.lstm_init(self.lang_lstm)
 
 
-class TopDownSentinalCore(nn.Module):
+class TopDownSentinalAffine2Core(nn.Module):
     def __init__(self, opt, use_maxout=False):
-        super(TopDownSentinalCore, self).__init__()
+        super(TopDownSentinalAffine2Core, self).__init__()
         self.drop_prob_lm = opt.drop_prob_lm
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
@@ -483,9 +483,12 @@ class TopDownSentinalCore(nn.Module):
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.sentinal_embed = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
                                             nn.ReLU(),
                                             nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                             nn.ReLU(),
+                                             nn.Dropout(self.drop_prob_lm))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, 1, rnn_size]
@@ -508,10 +511,22 @@ class TopDownSentinalCore(nn.Module):
         #--start-------generate sentinal--------#
         ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
         sentinal = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
-        state = state + (self.sentinal_embed(sentinal.unsqueeze(1)),)
+        state = state + (self.sentinal_embed2(self.sentinal_embed1(sentinal.unsqueeze(1))),)
         #--end-------generate sentinal--------#
 
         return output, state
+
+class TopDownSentinalAffineCore(TopDownSentinalAffine2Core):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownSentinalAffineCore, self).__init__(opt)
+        del self.sentinal_embed2
+        self.sentinal_embed2 = lambda x: x
+
+class TopDownSentinalCore(TopDownSentinalAffine2Core):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownSentinalCore, self).__init__(opt)
+        del self.sentinal_embed1, self.sentinal_embed2
+        self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
 
 class TopDownRecurrentHiddenCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
@@ -909,6 +924,18 @@ class TopDownOriginal2Model(AttModel):
         self.fc_embed = lambda x: x
         self.num_layers = 2
         self.core = TopDownOriginal2Core(opt)
+
+class TopDownSentinalAffine2Model(AttModel):
+    def __init__(self, opt):
+        super(TopDownSentinalAffine2Model, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownSentinalAffine2Core(opt)
+
+class TopDownSentinalAffineModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownSentinalAffineModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownSentinalAffineCore(opt)
 
 class TopDownSentinalModel(AttModel):
     def __init__(self, opt):
