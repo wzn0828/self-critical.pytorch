@@ -116,6 +116,7 @@ vocab = infos['vocab'] # ix -> word mapping
 model = models.setup(opt)
 model.load_state_dict(torch.load(opt.model))
 model.cuda()
+model = torch.nn.DataParallel(model)
 model.eval()
 crit = utils.LanguageModelCriterion()
 

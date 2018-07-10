@@ -44,15 +44,29 @@ def setup(opt):
     # DenseAtt
     elif opt.caption_model == 'denseatt':
         model = DenseAttModel(opt)
-    # Top-down-sentinal attention model
-    elif opt.caption_model == 'topdownsentinal':
+    # Top-down-sentinal attention model s
+    elif opt.caption_model == 'topdown_sentinal':
         model = TopDownSentinalModel(opt)
+    elif opt.caption_model == 'topdown_sentinal_affine':
+        model = TopDownSentinalAffineModel(opt)
+    elif opt.caption_model == 'topdown_sentinal_affine2':
+        model = TopDownSentinalAffine2Model(opt)
+
     elif opt.caption_model == 'topdown_recurrent_hidden':
         model = TopDownRecurrentHiddenModel(opt)
+
+    # Top-down-recurrent-sentinal model s
     elif opt.caption_model == 'topdown_recurrent_sentinal':
         model = TopDownRecurrentSentinalModel(opt)
+    elif opt.caption_model == 'topdown_recurrent_sentinal_affine':
+        model = TopDownRecurrentSentinalAffineModel(opt)
+    elif opt.caption_model == 'topdown_recurrent_sentinal_affine2':
+        model = TopDownRecurrentSentinalAffine2Model(opt)
+
+    # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
+    # base the original paper model
     elif opt.caption_model == 'topdown_original_2':
         model = TopDownOriginal2Model(opt)
     else:
