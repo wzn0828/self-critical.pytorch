@@ -52,8 +52,13 @@ def setup(opt):
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
 
-    elif opt.caption_model == 'topdown_recurrent_hidden':
-        model = TopDownRecurrentHiddenModel(opt)
+    # Top-down-cat-sentinal model s
+    elif opt.caption_model == 'topdown_cat_sentinal':
+        model = TopDownCatSentinalModel(opt)
+    elif opt.caption_model == 'topdown_cat_sentinal_affine':
+        model = TopDownCatSentinalAffineModel(opt)
+    elif opt.caption_model == 'topdown_cat_sentinal_affine2':
+        model = TopDownCatSentinalAffine2Model(opt)
 
     # Top-down-recurrent-sentinal model s
     elif opt.caption_model == 'topdown_recurrent_sentinal':
@@ -77,6 +82,10 @@ def setup(opt):
     # base the original paper model
     elif opt.caption_model == 'topdown_original_2':
         model = TopDownOriginal2Model(opt)
+
+    elif opt.caption_model == 'topdown_recurrent_hidden':
+        model = TopDownRecurrentHiddenModel(opt)
+
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
 
