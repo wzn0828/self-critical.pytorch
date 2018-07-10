@@ -632,6 +632,70 @@ class TopDownRecurrentSentinalCore(TopDownRecurrentSentinalAffine2Core):
         del self.sentinal_embed1, self.sentinal_embed2
         self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
 
+
+class TopDownCatRecurrentSentinalAffine2Core(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownCatRecurrentSentinalAffine2Core, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 3, opt.rnn_size) # h^1_t, \hat v
+        self.feature_att = Attention(opt)
+        self.sentinal_att = SentinalAttention(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*3, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                            nn.ReLU(),
+                                            nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
+                                            nn.ReLU(),
+                                            nn.Dropout(self.drop_prob_lm))
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        pre_sentinal = state[2:]
+        sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1) # [batch_size, num_recurrent, rnn_size]
+
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        feature_Att = self.feature_att(h_att, att_feats, p_att_feats, att_masks)  # batch * rnn_size
+        sentinal_Att = self.sentinal_att(h_att, sentinal)     # batch * rnn_size
+
+        lang_lstm_input = torch.cat([feature_Att, sentinal_Att, h_att], 1)    # batch_size * 3rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate recurrent--------#
+        ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        # sentinal_current = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        sentinal_current = ada_gate_point * F.tanh(c_lang)   # batch*rnn_size
+        sentinal_current = self.sentinal_embed2(self.sentinal_embed1(sentinal_current))
+        state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
+        #--end-------generate recurrent--------#
+
+        return output, state
+
+class TopDownCatRecurrentSentinalAffineCore(TopDownCatRecurrentSentinalAffine2Core):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownCatRecurrentSentinalAffineCore, self).__init__(opt)
+        del self.sentinal_embed2
+        self.sentinal_embed2 = lambda x: x
+
+class TopDownCatRecurrentSentinalCore(TopDownCatRecurrentSentinalAffine2Core):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownCatRecurrentSentinalCore, self).__init__(opt)
+        del self.sentinal_embed1, self.sentinal_embed2
+        self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
+
+
 ############################################################################
 # Notice:
 # StackAtt and DenseAtt are models that I randomly designed.
@@ -792,6 +856,41 @@ class AttentionRecurrent(nn.Module):
         beta = beta.unsqueeze(1)    # batch * 1 * num_hidden
         beta_sum = beta.sum(2) # batch * 1
         att_res_senti = (1 - beta_sum) * att_res + torch.bmm(beta, sentinal).squeeze(1)  # batch * rnn_size
+        # --end----recurrent attention-----#
+
+        return att_res_senti    # batch * rnn_size
+
+
+class SentinalAttention(nn.Module):
+    def __init__(self, opt):
+        super(SentinalAttention, self).__init__()
+        self.rnn_size = opt.rnn_size
+        self.att_hid_size = opt.att_hid_size
+
+        self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+
+        # ----sentinal attention-----#
+        self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+    def forward(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        num_hidden = sentinal.size(1)
+
+        #--start----recurrent attention (including sentinal attention, recurrent hidden attention, recurrent sentinal attention)-----#
+        att_h = self.h2att(h)  # batch * att_hid_size
+        att_senti = self.senti2att(sentinal)    # batch * num_hidden * att_hid_size
+        att_h = att_h.unsqueeze(1).expand_as(att_senti)  # batch * num_hidden * att_hid_size
+        dot_senti = att_senti + att_h   # batch * num_hidden * att_hid_size
+        dot_senti = F.tanh(dot_senti)   # batch * num_hidden * att_hid_size
+        dot_senti = dot_senti.view(-1, self.att_hid_size)  # (batch*num_hidden) * att_hid_size
+        dot_senti = self.alpha_net(dot_senti)  # (batch*num_hidden) * 1
+        dot_senti = dot_senti.view(-1, num_hidden)  # batch * num_hidden
+
+        weight_senti = F.softmax(dot_senti, dim=1)  # batch * num_hidden
+        weight_senti = weight_senti.unsqueeze(1)    # batch * 1 * num_hidden
+
+        att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
         # --end----recurrent attention-----#
 
         return att_res_senti    # batch * rnn_size
@@ -976,7 +1075,6 @@ class TopDownRecurrentSentinalModel(AttModel):
         self.num_layers = 2
         self.core = TopDownRecurrentSentinalCore(opt)
 
-
 class TopDownRecurrentSentinalAffineModel(AttModel):
     def __init__(self, opt):
         super(TopDownRecurrentSentinalAffineModel, self).__init__(opt)
@@ -988,6 +1086,26 @@ class TopDownRecurrentSentinalAffine2Model(AttModel):
         super(TopDownRecurrentSentinalAffine2Model, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownRecurrentSentinalAffine2Core(opt)
+
+
+class TopDownCatRecurrentSentinalModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownCatRecurrentSentinalModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownCatRecurrentSentinalCore(opt)
+
+class TopDownCatRecurrentSentinalAffineModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownCatRecurrentSentinalAffineModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownCatRecurrentSentinalAffineCore(opt)
+
+class TopDownCatRecurrentSentinalAffine2Model(AttModel):
+    def __init__(self, opt):
+        super(TopDownCatRecurrentSentinalAffine2Model, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownCatRecurrentSentinalAffine2Core(opt)
+
 
 class StackAttModel(AttModel):
     def __init__(self, opt):

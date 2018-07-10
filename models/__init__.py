@@ -63,6 +63,14 @@ def setup(opt):
     elif opt.caption_model == 'topdown_recurrent_sentinal_affine2':
         model = TopDownRecurrentSentinalAffine2Model(opt)
 
+    # Top-down-cat-recurrent-sentinal model s
+    elif opt.caption_model == 'topdown_cat_recurrent_sentinal':
+        model = TopDownCatRecurrentSentinalModel(opt)
+    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine':
+        model = TopDownCatRecurrentSentinalAffineModel(opt)
+    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine2':
+        model = TopDownCatRecurrentSentinalAffine2Model(opt)
+
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
