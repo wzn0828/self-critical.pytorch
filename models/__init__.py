@@ -66,7 +66,7 @@ def setup(opt):
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
-    # base the original paper model
+    # base the original paper model, add a affine to att_feature
     elif opt.caption_model == 'topdown_original_2':
         model = TopDownOriginal2Model(opt)
     else:
