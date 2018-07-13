@@ -18,7 +18,7 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 from misc.rewards import init_scorer, get_self_critical_reward
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 try:
     import tensorboardX as tb
@@ -32,6 +32,7 @@ def add_summary_value(writer, key, value, iteration):
 
 def train(opt):
     print('Checkpoint path is ' + opt.checkpoint_path)
+    print('This program is using GPU '+ str(os.environ['CUDA_VISIBLE_DEVICES']))
     # Deal with feature things before anything
     opt.use_att = utils.if_use_att(opt.caption_model)
     if opt.use_box: opt.att_feat_size = opt.att_feat_size + 5
@@ -251,26 +252,28 @@ opt.id = 'topdown_original'
 opt.caption_model = 'topdown_original'
 opt.rnn_size = 1000
 opt.input_encoding_size = 1000
-opt.drop_prob_lm = 0
 
 # data
 opt.input_json = 'data/cocotalk.json'
-opt.input_fc_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_fc'
-opt.input_att_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36_att'
+opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_fc'
+opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_36/trainval_36_att'
 opt.input_label_h5 = 'data/cocotalk_label.h5'
 
 # optimization
-opt.batch_size = 20
-opt.optim = 'sgdm'
-opt.learning_rate = 0.01
+opt.batch_size = 32
+opt.optim = 'adam'
+opt.learning_rate = 5e-4
 opt.optim_alpha = 0.9
-opt.max_iter = 60000
-opt.power = 1
-opt.weight_decay = 0.0005
-opt.grad_max_norm = 10
-opt.beam_size = 1
+opt.max_iter = 240000
+opt.power = None
+opt.weight_decay = 0.0
+opt.grad_max_norm = None
+opt.beam_size = 5
+opt.learning_rate_decay_start = 0
+opt.drop_prob_lm = 0.6
 
-opt.checkpoint_path = 'Experiments/bottom-up-top-down-original'
+opt.checkpoint_path = 'Experiments/top-down-original-debug'
+opt.scheduled_sampling_start = 0
 opt.save_checkpoint_every = 6000
 opt.val_images_use = 5000
 opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
