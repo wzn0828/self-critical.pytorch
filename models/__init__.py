@@ -93,10 +93,13 @@ def setup(opt):
     if vars(opt).get('start_from', None) is not None:
         # check if all necessary files exist 
         assert os.path.isdir(opt.start_from)," %s must be a a path" % opt.start_from
-        assert os.path.isfile(os.path.join(opt.start_from,"infos_"+opt.id+".pkl")),"infos.pkl file does not exist in path %s"%opt.start_from
         if opt.load_best:
+            assert os.path.isfile(os.path.join(opt.start_from,
+                                               "infos_" + opt.id + "-best.pkl")), "infos_-best.pkl file does not exist in path %s" % opt.start_from
             model.load_state_dict(torch.load(os.path.join(opt.start_from, 'model-best.pth')))
         else:
+            assert os.path.isfile(os.path.join(opt.start_from,
+                                               "infos_" + opt.id + ".pkl")), "infos.pkl file does not exist in path %s" % opt.start_from
             model.load_state_dict(torch.load(os.path.join(opt.start_from, 'model.pth')))
 
     return model
