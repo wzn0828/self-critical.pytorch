@@ -69,11 +69,11 @@ class AttModel(CaptionModel):
                                     nn.ReLU(),
                                     nn.Dropout(self.drop_prob_lm))
         self.att_embed = nn.Sequential(*(
-                                    ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ())+
-                                    (nn.Linear(self.att_feat_size, self.rnn_size),
-                                    nn.ReLU(),
-                                    nn.Dropout(self.drop_prob_lm))+
-                                    ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn==2 else ())))
+            ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
+            (nn.Linear(self.att_feat_size, self.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
@@ -488,15 +488,20 @@ class TopDownSentinalAffine2Core(nn.Module):
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
         self.attention = AttentionRecurrent(opt)
 
-        #-------generate sentinal--------#
-        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        # -------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size * 2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                            nn.ReLU(),
-                                            nn.Dropout(self.drop_prob_lm))
-        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                             nn.ReLU(),
-                                             nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed1 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+        self.sentinal_embed2 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2][0].unsqueeze(1) # [batch_size, 1, rnn_size]
@@ -591,12 +596,16 @@ class TopDownRecurrentSentinalAffine2Core(nn.Module):
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                            nn.ReLU(),
-                                            nn.Dropout(self.drop_prob_lm))
-        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                            nn.ReLU(),
-                                            nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed1 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+        self.sentinal_embed2 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -653,12 +662,16 @@ class TopDownCatRecurrentSentinalAffine2Core(nn.Module):
         #-------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size*3, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                            nn.ReLU(),
-                                            nn.Dropout(self.drop_prob_lm))
-        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                            nn.ReLU(),
-                                            nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed1 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+        self.sentinal_embed2 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -715,12 +728,16 @@ class TopDownCatSentinalAffine2Core(nn.Module):
         # -------generate sentinal--------#
         self.i2h_2 = nn.Linear(opt.rnn_size * 3, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.sentinal_embed1 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                             nn.ReLU(),
-                                             nn.Dropout(self.drop_prob_lm))
-        self.sentinal_embed2 = nn.Sequential(nn.Linear(opt.rnn_size, opt.rnn_size),
-                                             nn.ReLU(),
-                                             nn.Dropout(self.drop_prob_lm))
+        self.sentinal_embed1 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+        self.sentinal_embed2 = nn.Sequential(*(
+            (nn.Linear(opt.rnn_size, opt.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2][0]  # [batch_size, rnn_size]
