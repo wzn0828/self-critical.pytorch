@@ -138,7 +138,34 @@ def train(opt):
         
         optimizer.zero_grad()
         if not sc_flag:
-            loss = crit(dp_model(fc_feats, att_feats, labels, att_masks), labels[:,1:], masks[:,1:])
+            output = dp_model(fc_feats, att_feats, labels, att_masks)
+            outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
+            results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
+            # calculate loss
+            loss = crit(output[0], labels[:,1:], masks[:,1:])
+
+            if iteration % 10 == 0:
+                # add original fc_feats histogram
+                tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
+
+                # add original att_feats histogram
+                tb_summary_writer.add_histogram('att_feat',  data['att_feats'], iteration)
+
+                # add affined fc_feats histogram
+                tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
+
+                # add affined att_feat histogram
+                tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+
+                # add att_hiddens histogram
+                tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
+
+                # add lan_hiddens histogram
+                tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
+
+                # add sentinal histogram
+                tb_summary_writer.add_histogram('sentinel', sentinels, iteration)
+
         else:
             gen_result, sample_logprobs = dp_model(fc_feats, att_feats, att_masks, opt={'sample_max':0}, mode='sample')
             reward = get_self_critical_reward(dp_model, fc_feats, att_feats, att_masks, data, gen_result, opt)

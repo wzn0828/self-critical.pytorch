@@ -128,6 +128,9 @@ class AttModel(CaptionModel):
         state = self.init_hidden(batch_size)  # [num_layers, batchsize, rnn_size]
 
         outputs = fc_feats.new_zeros(batch_size, seq.size(1) - 1, self.vocab_size+1) # [batch_size, 17, vocab_size+1]
+        sentinals = []
+        att_hiddens = []
+        lan_hiddens = []
 
         # Prepare the features
         p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks) # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
@@ -156,7 +159,11 @@ class AttModel(CaptionModel):
             output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
-        return outputs
+            att_hiddens.append(state[0][0])
+            lan_hiddens.append(state[0][1])
+            sentinals.append(state[-1][0])
+
+        return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(sentinals)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, state):
         # 'it' contains a word index
