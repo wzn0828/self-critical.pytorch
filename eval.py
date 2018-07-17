@@ -86,6 +86,16 @@ parser.add_argument('--verbose_loss', type=int, default=0,
 
 opt = parser.parse_args()
 
+# ----- for my local set ----- #
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+opt.dump_images = 0
+opt.num_images = 5000
+opt.model = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/att2in2_rnn1000_rl/model-best.pth'
+opt.infos_path = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/att2in2_rnn1000_rl/infos_att2in2_rnn1000_rl-best.pkl'
+opt.language_eval = 1
+opt.beam_size = 5
+# ----- for my local set ----- #
+
 # Load infos
 with open(opt.infos_path) as f:
     infos = cPickle.load(f)
