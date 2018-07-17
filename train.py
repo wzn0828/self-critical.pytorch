@@ -139,12 +139,13 @@ def train(opt):
         optimizer.zero_grad()
         if not sc_flag:
             output = dp_model(fc_feats, att_feats, labels, att_masks)
-            outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
-            results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
             # calculate loss
             loss = crit(output[0], labels[:,1:], masks[:,1:])
 
+            # add some middle variable histogram
             if iteration % opt.losses_log_every == 0:
+                outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
+                results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
                 # add original fc_feats histogram
                 tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
 
