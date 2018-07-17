@@ -23,16 +23,16 @@ csv.field_size_limit(sys.maxsize)
 
 
 FIELDNAMES = ['image_id', 'image_w','image_h','num_boxes', 'boxes', 'features']
-infiles = ['trainval/karpathy_test_resnet101_faster_rcnn_genome.tsv',
-          'trainval/karpathy_val_resnet101_faster_rcnn_genome.tsv',\
-          'trainval/karpathy_train_resnet101_faster_rcnn_genome.tsv.0', \
-           'trainval/karpathy_train_resnet101_faster_rcnn_genome.tsv.1']
+infiles = ['karpathy_test_resnet101_faster_rcnn_genome.tsv',
+          'karpathy_val_resnet101_faster_rcnn_genome.tsv',\
+          'karpathy_train_resnet101_faster_rcnn_genome.tsv.0', \
+           'karpathy_train_resnet101_faster_rcnn_genome.tsv.1']
 
 
 #----for my local set----#
-args.downloaded_feats = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36'
-args.output_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_36/trainval_36'
-infiles =['trainval_resnet101_faster_rcnn_genome_36.tsv']
+args.downloaded_feats = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_2-10'
+args.output_dir = '/media/samsumg_1tb/Image_Caption/Datasets/MSCOCO/detection_features/trainval_2-10/trainval'
+# infiles =['trainval_resnet101_faster_rcnn_genome_36.tsv']
 #----for my local set----#
 
 
