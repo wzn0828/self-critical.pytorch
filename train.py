@@ -213,6 +213,19 @@ def train(opt):
 
         # make evaluation on validation set, and save model
         if (iteration % opt.save_checkpoint_every == 0):
+
+            # eval model on training data
+            eval_kwargs = {'split': 'train_eval',
+                           'dataset': opt.input_json}
+            eval_kwargs.update(vars(opt))
+            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(dp_model, crit, loader, eval_kwargs)
+
+            # Write train_eval result into summary
+            add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
+            if lang_stats is not None:
+                for k, v in lang_stats.items():
+                    add_summary_value(tb_summary_writer, k+'/train', v, iteration)
+
             # eval model
             eval_kwargs = {'split': 'val',
                             'dataset': opt.input_json}
@@ -220,10 +233,10 @@ def train(opt):
             val_loss, predictions, lang_stats = eval_utils.eval_split(dp_model, crit, loader, eval_kwargs)
 
             # Write validation result into summary
-            add_summary_value(tb_summary_writer, 'validation loss', val_loss, iteration)
+            add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
             if lang_stats is not None:
                 for k,v in lang_stats.items():
-                    add_summary_value(tb_summary_writer, k, v, iteration)
+                    add_summary_value(tb_summary_writer, k+'/val', v, iteration)
             val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
 
             # Save model if is improving on validation result

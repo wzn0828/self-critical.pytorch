@@ -11,6 +11,8 @@ import random
 import torch
 import torch.utils.data as data
 
+from random import seed, sample
+
 import multiprocessing
 
 class DataLoader(data.Dataset):
@@ -67,7 +69,7 @@ class DataLoader(data.Dataset):
         print('read %d image features' %(self.num_images))
 
         # separate out indexes for each of the provided splits
-        self.split_ix = {'train': [], 'val': [], 'test': []}
+        self.split_ix = {'train': [], 'val': [], 'test': [], 'train_eval':[]}
         for ix in range(len(self.info['images'])):
             img = self.info['images'][ix]
             if img['split'] == 'train':
@@ -79,11 +81,17 @@ class DataLoader(data.Dataset):
             elif opt.train_only == 0: # restval
                 self.split_ix['train'].append(ix)
 
+        # subset for evaluation of train data
+        seed(123)
+        self.split_ix['train_eval'] = [self.split_ix['train'][i] for i in
+                                 sorted(sample(range(len(self.split_ix['train'])), opt.train_eval_images_use))]
+
+
         print('assigned %d images to split train' %len(self.split_ix['train']))
         print('assigned %d images to split val' %len(self.split_ix['val']))
         print('assigned %d images to split test' %len(self.split_ix['test']))
 
-        self.iterators = {'train': 0, 'val': 0, 'test': 0}
+        self.iterators = {'train': 0, 'val': 0, 'test': 0, 'train_eval': 0}
         
         self._prefetch_process = {} # The three prefetch process
         for split in self.iterators.keys():
