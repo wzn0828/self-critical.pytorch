@@ -70,6 +70,7 @@ class DataLoader(data.Dataset):
 
         # separate out indexes for each of the provided splits
         self.split_ix = {'train': [], 'val': [], 'test': [], 'train_eval':[]}
+        train_eval = []
         for ix in range(len(self.info['images'])):
             img = self.info['images'][ix]
             if img['split'] == 'train':
@@ -80,11 +81,13 @@ class DataLoader(data.Dataset):
                 self.split_ix['test'].append(ix)
             elif opt.train_only == 0: # restval
                 self.split_ix['train'].append(ix)
+                train_eval.append(ix)
+
 
         # subset for evaluation of train data
         seed(123)
-        self.split_ix['train_eval'] = [self.split_ix['train'][i] for i in
-                                 sorted(sample(range(len(self.split_ix['train'])), opt.train_eval_images_use))]
+        self.split_ix['train_eval'] = [train_eval[i] for i in
+                                 sorted(sample(range(len(train_eval)), opt.train_eval_images_use))]
 
 
         print('assigned %d images to split train' %len(self.split_ix['train']))
