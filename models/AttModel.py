@@ -62,12 +62,18 @@ class AttModel(CaptionModel):
 
         self.ss_prob = 0.0 # Schedule sampling probability
 
-        self.embed = nn.Sequential(nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
-                                nn.ReLU(),
-                                nn.Dropout(self.drop_prob_lm))
-        self.fc_embed = nn.Sequential(nn.Linear(self.fc_feat_size, self.rnn_size),
-                                    nn.ReLU(),
-                                    nn.Dropout(self.drop_prob_lm))
+        self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
+                                      nn.ReLU(),) +
+                                     ((nn.BatchNorm1d(self.input_encoding_size),) if opt.emb_use_bn else ()) +
+                                     (nn.Dropout(self.drop_prob_lm),)
+                                     ))
+        self.fc_embed = nn.Sequential(*(
+            ((nn.BatchNorm1d(self.fc_feat_size),) if opt.fc_use_bn else ()) +
+            (nn.Linear(self.fc_feat_size, self.rnn_size),
+             nn.ReLU(),) +
+            ((nn.BatchNorm1d(self.rnn_size),) if opt.fc_use_bn == 2 else ()) +
+            (nn.Dropout(self.drop_prob_lm),)))
+
         self.att_embed = nn.Sequential(*(
             ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
             (nn.Linear(self.att_feat_size, self.rnn_size),
@@ -85,7 +91,7 @@ class AttModel(CaptionModel):
 
         # initialization
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
-        model_utils.kaiming_normal('relu', 0, self.fc_embed[0], filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0], self.logit)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0], filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0], self.logit)
         model_utils.xavier_uniform('tanh', self.ctx2att)
 
 
