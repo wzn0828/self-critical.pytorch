@@ -570,6 +570,11 @@ class TopDownRecurrentHiddenCore(nn.Module):
                                     nn.ReLU(),
                                     nn.Dropout(self.drop_prob_lm))
 
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed)[0])
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2] # [batch_size, num_recurrent, rnn_size]
 
@@ -619,6 +624,13 @@ class TopDownRecurrentSentinalAffine2Core(nn.Module):
              nn.ReLU(),) +
             ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
             (nn.Dropout(self.drop_prob_lm),)))
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed1)[0],
+                                   filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed2)[0])
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -686,6 +698,13 @@ class TopDownCatRecurrentSentinalAffine2Core(nn.Module):
             ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
             (nn.Dropout(self.drop_prob_lm),)))
 
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed1)[0],
+                                   filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed2)[0])
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
         sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1) # [batch_size, num_recurrent, rnn_size]
@@ -751,6 +770,14 @@ class TopDownCatSentinalAffine2Core(nn.Module):
              nn.ReLU(),) +
             ((nn.BatchNorm1d(opt.rnn_size),) if opt.use_bn else ()) +
             (nn.Dropout(self.drop_prob_lm),)))
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed1)[0],
+                                   filter(lambda x: 'linear' in str(type(x)), self.sentinal_embed2)[0])
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         sentinal = state[2][0]  # [batch_size, rnn_size]
@@ -972,6 +999,10 @@ class SentinalAttention(nn.Module):
 
         # ----sentinal attention-----#
         self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+        # initialization
+        model_utils.xavier_uniform('tanh', self.h2att, self.senti2att)
+        model_utils.kaiming_normal('relu', 0, self.alpha_net)
 
     def forward(self, h, sentinal):
         # sentinal's shape is batch * num_hidden * rnn_size
