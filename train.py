@@ -218,7 +218,7 @@ def train(opt):
             eval_kwargs = {'split': 'train_eval',
                            'dataset': opt.input_json}
             eval_kwargs.update(vars(opt))
-            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(dp_model, crit, loader, eval_kwargs)
+            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
 
             # Write train_eval result into summary
             add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
@@ -230,7 +230,7 @@ def train(opt):
             eval_kwargs = {'split': 'val',
                             'dataset': opt.input_json}
             eval_kwargs.update(vars(opt))
-            val_loss, predictions, lang_stats = eval_utils.eval_split(dp_model, crit, loader, eval_kwargs)
+            val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
 
             # Write validation result into summary
             add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
