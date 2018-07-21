@@ -143,7 +143,7 @@ def train(opt):
             loss = crit(output[0], labels[:,1:], masks[:,1:])
 
             # add some middle variable histogram
-            if iteration % opt.losses_log_every == 0:
+            if iteration % (4*opt.losses_log_every) == 0:
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
                 results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
                 # add original fc_feats histogram
@@ -207,9 +207,10 @@ def train(opt):
             lr_history[iteration] = opt.current_lr
             ss_prob_history[iteration] = model.ss_prob
 
-            # add weights histogram to tensorboard summary
-            for name, param in model.named_parameters():
-                tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
+            if (iteration % (8*opt.losses_log_every) == 0):
+                # add weights histogram to tensorboard summary
+                for name, param in model.named_parameters():
+                    tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
 
         # make evaluation on validation set, and save model
         if (iteration % opt.save_checkpoint_every == 0):
