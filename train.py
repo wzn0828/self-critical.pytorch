@@ -248,7 +248,7 @@ def train(opt):
 
             best_flag = False
             if True: # if true
-                if best_val_score is None or current_score > best_val_score:
+                if best_val_score is None or current_score >= best_val_score:
                     best_val_score = current_score
                     best_flag = True
                 checkpoint_path = os.path.join(opt.checkpoint_path, 'model.pth')
