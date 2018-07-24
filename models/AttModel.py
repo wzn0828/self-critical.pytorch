@@ -775,6 +775,57 @@ class TopDownWeightedSentinalCore(nn.Module):
         return output, state
 
 
+class TopDownWeighted2SentinalCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownWeighted2SentinalCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
+        self.attention = AttentionRecurrent(opt)
+        self.sen_attention = SentinalAttention(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        pre_sentinal = state[2:]
+        sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1) # [batch_size, num_recurrent, rnn_size]
+
+        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        weighted_sentinal = self.sen_attention(prev_h, sentinal)   #batch_size * rnn_size
+        att = self.attention(h_att, att_feats, p_att_feats, weighted_sentinal.unsqueeze(1), att_masks)  # h, att_feats, p_att_feats, sentinal, att_masks=None
+
+        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate recurrent--------#
+        ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        # sentinal_current = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        sentinal_current = ada_gate_point * F.tanh(c_lang)   # batch*rnn_size
+        sentinal_current = self.sentinal_embed2(self.sentinal_embed1(sentinal_current))
+        state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
+        #--end-------generate recurrent--------#
+
+        return output, state
+
+
 class TopDownCatRecurrentSentinalAffine2Core(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownCatRecurrentSentinalAffine2Core, self).__init__()
@@ -1320,6 +1371,13 @@ class TopDownWeightedSentinalModel(AttModel):
         super(TopDownWeightedSentinalModel, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownWeightedSentinalCore(opt)
+
+
+class TopDownWeighted2SentinalModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownWeighted2SentinalModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownWeighted2SentinalCore(opt)
 
 
 class TopDownRecurrentSentinalAffineModel(AttModel):

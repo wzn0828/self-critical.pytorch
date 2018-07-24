@@ -76,6 +76,10 @@ def setup(opt):
     elif opt.caption_model == 'topdown_weighted_sentinal':
         model = TopDownWeightedSentinalModel(opt)
 
+    # top-down-weighted2-sentinal model
+    elif opt.caption_model == 'topdown_weighted2_sentinal':
+        model = TopDownWeighted2SentinalModel(opt)
+
     # Top-down-cat-recurrent-sentinal model s
     elif opt.caption_model == 'topdown_cat_recurrent_sentinal':
         model = TopDownCatRecurrentSentinalModel(opt)
