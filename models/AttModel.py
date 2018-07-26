@@ -474,7 +474,6 @@ class TopDownOriginalCore(TopDownCore):
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
 
-
 class TopDownOriginal2Core(TopDownOriginalCore):
     def __init__(self, opt):
         super(TopDownOriginal2Core, self).__init__(opt)
@@ -1305,9 +1304,9 @@ class TopDownModel(AttModel):
 class TopDownOriginalModel(AttModel):
     def __init__(self, opt):
         super(TopDownOriginalModel, self).__init__(opt)
-        del self.embed, self.fc_embed, self.att_embed
-        self.embed = nn.Embedding(self.vocab_size + 1, self.input_encoding_size)
-        self.fc_embed = self.att_embed = lambda x: x
+        del self.fc_embed, self.att_embed
+        self.fc_embed = nn.BatchNorm1d(self.fc_feat_size)
+        self.att_embed = nn.BatchNorm1d(self.att_feat_size)
         del self.ctx2att
         self.ctx2att = nn.Linear(self.att_feat_size, self.att_hid_size, bias=False)
 
@@ -1316,8 +1315,6 @@ class TopDownOriginalModel(AttModel):
 
         # initialization
         model_utils.xavier_uniform('tanh', self.ctx2att)
-        nn.init.normal_(self.embed.weight, mean=0, std=0.01)
-
 
 class TopDownOriginal2Model(AttModel):
     def __init__(self, opt):
