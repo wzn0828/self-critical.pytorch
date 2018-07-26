@@ -207,10 +207,11 @@ def train(opt):
             lr_history[iteration] = opt.current_lr
             ss_prob_history[iteration] = model.ss_prob
 
-            if (iteration % (8*opt.losses_log_every) == 0):
-                # add weights histogram to tensorboard summary
-                for name, param in model.named_parameters():
-                    tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
+        if (iteration % (8*opt.losses_log_every) == 0):
+            # add weights histogram to tensorboard summary
+            for name, param in model.named_parameters():
+                tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
+                tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
 
         # make evaluation on validation set, and save model
         if (iteration % opt.save_checkpoint_every == 0):
