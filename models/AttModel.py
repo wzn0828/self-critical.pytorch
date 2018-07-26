@@ -1308,7 +1308,7 @@ class TopDownOriginalModel(AttModel):
         self.fc_embed = nn.BatchNorm1d(self.fc_feat_size)
         self.att_embed = nn.BatchNorm1d(self.att_feat_size)
         del self.ctx2att
-        self.ctx2att = nn.Linear(self.att_feat_size, self.att_hid_size, bias=False)
+        self.ctx2att = nn.Linear(self.att_feat_size, self.att_hid_size)
 
         self.num_layers = 2
         self.core = TopDownOriginalCore(opt)
