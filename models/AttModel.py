@@ -379,7 +379,7 @@ class AdaAtt_attention(nn.Module):
             nn.Dropout(self.drop_prob_lm))
         self.ho_embed = nn.Linear(self.input_encoding_size, self.att_hid_size)
 
-        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
         self.att2h = nn.Linear(self.rnn_size, self.rnn_size)
 
     def forward(self, h_out, fake_region, conv_feat, conv_feat_embed, att_masks=None):
@@ -1053,7 +1053,7 @@ class Attention(nn.Module):
         self.att_hid_size = opt.att_hid_size
 
         self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
-        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # initialization
         model_utils.xavier_uniform('tanh', self.h2att)
@@ -1088,7 +1088,7 @@ class AttentionRecurrent(nn.Module):
         self.att_hid_size = opt.att_hid_size
 
         self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
-        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # ----sentinal attention-----#
         self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
@@ -1146,7 +1146,7 @@ class SentinalAttention(nn.Module):
         self.att_hid_size = opt.att_hid_size
 
         self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
-        self.alpha_net = nn.Linear(self.att_hid_size, 1)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # ----sentinal attention-----#
         self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
