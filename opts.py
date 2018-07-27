@@ -68,6 +68,8 @@ def parse_opt():
                     help='clip gradients at this value')
     parser.add_argument('--drop_prob_lm', type=float, default=0.5,
                     help='strength of dropout in the Language Model RNN')
+    parser.add_argument('--drop_prob_rnn', type=float, default=0.5,
+                        help='strength of dropout in the Language Model RNN hidden states')
     parser.add_argument('--self_critical_after', type=int, default=-1,
                     help='After what epoch do we start finetuning the CNN? (-1 = disable; never finetune, 0 = finetune from start)')
     parser.add_argument('--seq_per_img', type=int, default=5,
