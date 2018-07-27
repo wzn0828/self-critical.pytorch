@@ -446,7 +446,7 @@ class TopDownCore(nn.Module):
         model_utils.lstm_init(self.lang_lstm)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
-        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        prev_h = F.dropout(state[0][-1], self.drop_prob_lm, self.training)       # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
 
         h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
@@ -454,6 +454,7 @@ class TopDownCore(nn.Module):
         att = self.attention(h_att, att_feats, p_att_feats, att_masks)
 
         lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        lang_lstm_input = F.dropout(lang_lstm_input, self.drop_prob_lm, self.training)
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
@@ -473,6 +474,7 @@ class TopDownOriginalCore(TopDownCore):
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
+
 
 class TopDownOriginal2Core(TopDownOriginalCore):
     def __init__(self, opt):
@@ -734,8 +736,12 @@ class TopDownWeightedSentinalCore(nn.Module):
         self.sen_attention = SentinalAttention(opt)
 
         #-------generate sentinal--------#
-        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        if opt.caption_model == 'topdown_original_weighted_sentinel':
+            self.i2h_2 = nn.Linear(opt.att_feat_size + opt.rnn_size, opt.rnn_size)
+        else:
+            self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
         self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+
         self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
 
         # initialization
@@ -970,6 +976,26 @@ class TopDownCatSentinalCore(TopDownCatSentinalAffine2Core):
         self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
 
 
+class TopDownOriginalWeightedSentinalCore(TopDownWeightedSentinalCore):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownOriginalWeightedSentinalCore, self).__init__(opt)
+        del self.att_lstm, self.lang_lstm
+        self.att_lstm = nn.LSTMCell(opt.rnn_size + opt.fc_feat_size + opt.input_encoding_size,
+                                    opt.rnn_size)  # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.att_feat_size + opt.rnn_size, opt.rnn_size)  # h^1_t, \hat v  # initialization
+
+        del self.sen_attention
+        self.sen_attention = O_SentinalAttention(opt)
+
+        del self.sentinal_embed1
+        self.sentinal_embed1 = nn.Linear(opt.rnn_size, opt.att_feat_size)
+
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_normal('linear', self.sentinal_embed1)
+
+
+
 ############################################################################
 # Notice:
 # StackAtt and DenseAtt are models that I randomly designed.
@@ -1091,7 +1117,10 @@ class AttentionRecurrent(nn.Module):
         self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # ----sentinal attention-----#
-        self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
+        if opt.caption_model == 'topdown_original_weighted_sentinel':
+            self.senti2att = nn.Linear(opt.att_feat_size, self.att_hid_size)
+        else:
+            self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
 
         # initialization
         model_utils.xavier_uniform('tanh', self.h2att, self.senti2att)
@@ -1176,6 +1205,19 @@ class SentinalAttention(nn.Module):
         # --end----recurrent attention-----#
 
         return att_res_senti    # batch * rnn_size
+
+
+class O_SentinalAttention(SentinalAttention):
+    def __init__(self, opt):
+        super(O_SentinalAttention, self).__init__(opt)
+
+        # ----sentinal attention-----#
+        del self.senti2att
+        self.senti2att = nn.Linear(opt.att_feat_size, self.att_hid_size)
+
+        # initialization
+        model_utils.xavier_uniform('tanh', self.senti2att)
+
 
 class Att2in2Core(nn.Module):
     def __init__(self, opt):
@@ -1315,6 +1357,21 @@ class TopDownOriginalModel(AttModel):
 
         # initialization
         model_utils.xavier_uniform('tanh', self.ctx2att)
+
+
+class TopDownOriginalWeightedSentinelModel(TopDownOriginalModel):
+    def __init__(self, opt):
+        super(TopDownOriginalWeightedSentinelModel, self).__init__(opt)
+        self.att_feat_size = opt.att_feat_size
+        del self.core
+        self.core = TopDownOriginalWeightedSentinalCore(opt)
+
+    def init_hidden(self, bsz):
+        weight = next(self.parameters())
+        return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
+                weight.new_zeros(self.num_layers, bsz, self.rnn_size),
+                weight.new_zeros(self.num_layers, bsz, self.att_feat_size))  # (h0, c0, sentinal)
+        # weight.new_zeros(bsz, 1, self.rnn_size))       # (h0, c0, sentinal)
 
 class TopDownOriginal2Model(AttModel):
     def __init__(self, opt):
