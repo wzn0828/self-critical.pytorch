@@ -730,6 +730,7 @@ class TopDownWeightedSentinalCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownWeightedSentinalCore, self).__init__()
         self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_rnn = opt.drop_prob_rnn
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
@@ -753,8 +754,9 @@ class TopDownWeightedSentinalCore(nn.Module):
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
         sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1) # [batch_size, num_recurrent, rnn_size]
+        # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
 
-        prev_h = state[0][-1]       # [batch_size, rnn_size]
+        prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)       # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
 
         h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
@@ -762,7 +764,7 @@ class TopDownWeightedSentinalCore(nn.Module):
         weighted_sentinal = self.sen_attention(h_att, sentinal)   #batch_size * rnn_size
         att = self.attention(h_att, att_feats, p_att_feats, weighted_sentinal.unsqueeze(1), att_masks)  # h, att_feats, p_att_feats, sentinal, att_masks=None
 
-        lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_rnn, self.training)], 1)    # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
@@ -1425,6 +1427,18 @@ class TopDownWeightedSentinalModel(AttModel):
     def __init__(self, opt):
         super(TopDownWeightedSentinalModel, self).__init__(opt)
         self.num_layers = 2
+        self.core = TopDownWeightedSentinalCore(opt)
+
+
+class TopDownWeightedSentinalModel_tanh_att(AttModel):
+    def __init__(self, opt):
+        super(TopDownWeightedSentinalModel_tanh_att, self).__init__(opt)
+        self.num_layers = 2
+        del self.att_embed
+        self.att_embed = nn.Sequential(*(
+            ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
+            (nn.Linear(self.att_feat_size, self.rnn_size),) +
+            (nn.Tanh(), nn.Dropout(self.drop_prob_lm),)))
         self.core = TopDownWeightedSentinalCore(opt)
 
 

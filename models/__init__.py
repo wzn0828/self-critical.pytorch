@@ -76,6 +76,9 @@ def setup(opt):
     elif opt.caption_model == 'topdown_weighted_sentinal':
         model = TopDownWeightedSentinalModel(opt)
 
+    elif opt.caption_model == 'topdown_weighted_sentinal_tanh_att':
+        model = TopDownWeightedSentinalModel_tanh_att(opt)
+
     # top-down-weighted2-sentinal model
     elif opt.caption_model == 'topdown_weighted2_sentinal':
         model = TopDownWeighted2SentinalModel(opt)
