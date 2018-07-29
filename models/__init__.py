@@ -102,6 +102,12 @@ def setup(opt):
     elif opt.caption_model == 'topdown_cat_weighted_sentinal':
         model = TopDownCatWeightedSentinalModel(opt)
 
+
+    # topdown_cat_weighted_sentinal_base_attfeat
+    elif opt.caption_model == 'topdown_cat_weighted_sentinal_base_attfeat':
+        model = TopDownCatWeightedSentinalBaseAttModel(opt)
+
+
     # topdown_up_cat_weighted_sentinal
     elif opt.caption_model == 'topdown_up_cat_weighted_sentinal':
         model = TopDownUpCatWeightedSentinalModel(opt)
