@@ -120,7 +120,13 @@ class AttModel(CaptionModel):
         # Project the attention feats first to reduce memory and computation comsumptions.
         p_att_feats = self.ctx2att(att_feats)
 
-        return fc_feats, att_feats, p_att_feats, att_masks
+        att_masks_expand = att_masks.unsqueeze(2).expand_as(att_feats)
+        att_feats_masked = att_feats * att_masks_expand
+        lens = att_masks.data.long().sum(1)
+        lens = lens.unsqueeze(1).expand(lens.size(0), att_feats.size(-1))
+        average_att_feat = att_feats_masked.sum(1)/lens.data.float()        # batch*rnn_size
+
+        return fc_feats, att_feats, p_att_feats, att_masks, average_att_feat
 
     def _forward(self, fc_feats, att_feats, seq, att_masks=None):
         '''
@@ -139,7 +145,7 @@ class AttModel(CaptionModel):
         lan_hiddens = []
 
         # Prepare the features
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks) # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats, att_feats, att_masks) # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
         # pp_att_feats is used for attention, we cache it in advance to reduce computation cost
 
         for i in range(seq.size(1) - 1):
@@ -162,7 +168,7 @@ class AttModel(CaptionModel):
             if i >= 1 and seq[:, i].sum() == 0:
                 break
 
-            output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, state)  # batch*(vocab_size+1)
+            output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
             att_hiddens.append(state[0][0])
@@ -171,7 +177,7 @@ class AttModel(CaptionModel):
 
         return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(sentinals)
 
-    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, state):
+    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
         # 'it' contains a word index
         xt = self.embed(it)     # [batch_size, input_encoding_size]
 
@@ -184,7 +190,7 @@ class AttModel(CaptionModel):
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
 
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats, att_masks)
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats, att_feats, att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
         seq = torch.LongTensor(self.seq_length, batch_size).zero_()
@@ -198,14 +204,15 @@ class AttModel(CaptionModel):
             tmp_att_feats = p_att_feats[k:k+1].expand(*((beam_size,)+p_att_feats.size()[1:])).contiguous()
             tmp_p_att_feats = pp_att_feats[k:k+1].expand(*((beam_size,)+pp_att_feats.size()[1:])).contiguous()
             tmp_att_masks = p_att_masks[k:k+1].expand(*((beam_size,)+p_att_masks.size()[1:])).contiguous() if att_masks is not None else None
+            tmp_average_att_feat = average_att_feat[k:k + 1].expand(beam_size, average_att_feat.size(1))
 
             for t in range(1):
                 if t == 0: # input <bos>
                     it = fc_feats.new_zeros([beam_size], dtype=torch.long)
 
-                logprobs, state = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats, tmp_att_masks, state)
+                logprobs, state = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats, tmp_att_masks, tmp_average_att_feat, state)
 
-            self.done_beams[k] = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats, tmp_att_masks, opt=opt)
+            self.done_beams[k] = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats, tmp_att_masks,tmp_average_att_feat, opt=opt)
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
         # return the samples and their log likelihoods
@@ -951,6 +958,60 @@ class TopDownUpAddWeightedSentinalCore(nn.Module):
         return output, state
 
 
+class TopDownUpCatWeightedSentinalBaseAttCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TopDownUpCatWeightedSentinalBaseAttCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_rnn = opt.drop_prob_rnn
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size) # h^1_t, \hat v
+        self.attention = Attention(opt)
+        self.sen_attention = SentinalAttention(opt)
+
+        #-------generate sentinal--------#
+        self.i2h_2 = nn.Linear(opt.rnn_size*2, opt.rnn_size)
+        self.h2h_2 = nn.Linear(opt.rnn_size, opt.rnn_size)
+
+        self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+        model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, average_att_feat, att_masks=None):
+        pre_sentinal = state[2:]
+        sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1) # [batch_size, num_recurrent, rnn_size]
+        # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
+
+        prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)       # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)   # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))    # both are [batch_size, rnn_size]
+
+        att = self.attention(h_att, att_feats, p_att_feats, att_masks) #batch_size * rnn_size
+
+        lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_rnn, self.training)], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
+
+        weighted_sentinal = self.sen_attention(average_att_feat, sentinal)  # batch_size * rnn_size
+        output = torch.cat([F.dropout(h_lang, self.drop_prob_lm, self.training), F.dropout(weighted_sentinal, self.drop_prob_lm, self.training)], 1)  # batch_size * 2rnn_size
+
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        #--start-------generate recurrent--------#
+        ada_gate_point = F.sigmoid(self.i2h_2(lang_lstm_input) + self.h2h_2(prev_h))      # batch*rnn_size
+        # sentinal_current = F.dropout(ada_gate_point * F.tanh(c_lang), self.drop_prob_lm, self.training)     # batch*rnn_size
+        sentinal_current = ada_gate_point * F.tanh(c_lang)   # batch*rnn_size
+        sentinal_current = self.sentinal_embed2(self.sentinal_embed1(sentinal_current))
+        state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
+        #--end-------generate recurrent--------#
+
+        return output, state
+
 
 class TopDownWeighted2SentinalCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
@@ -1615,6 +1676,26 @@ class TopDownUpCatWeightedSentinalModel(AttModel):
         del self.logit
         self.logit = nn.Linear(2*self.rnn_size, self.vocab_size + 1)
         model_utils.kaiming_normal('relu', 0, self.logit)
+
+
+class TopDownUpCatWeightedSentinalBaseAttModel(AttModel):
+    def __init__(self, opt):
+        super(TopDownUpCatWeightedSentinalBaseAttModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TopDownUpCatWeightedSentinalBaseAttCore(opt)
+
+        del self.logit
+        self.logit = nn.Linear(2*self.rnn_size, self.vocab_size + 1)
+        model_utils.kaiming_normal('relu', 0, self.logit)
+
+    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
+        # 'it' contains a word index
+        xt = self.embed(it)     # [batch_size, input_encoding_size]
+
+        output, state = self.core(xt, fc_feats, att_feats, p_att_feats, state, average_att_feat, att_masks)   # batch*rn_size
+        logprobs = F.log_softmax(self.logit(output), dim=1)     # batch*(vocab_size+1)
+
+        return logprobs, state
 
 
 class TopDownUpAddWeightedSentinalModel(AttModel):
