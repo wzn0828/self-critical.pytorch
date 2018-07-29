@@ -117,6 +117,10 @@ def setup(opt):
         model = TopDownUpCatWeightedSentinalBaseAttModel(opt)
 
 
+    # topdown_up_cat_weighted_sentinal
+    elif opt.caption_model == 'topdown_up_add_weighted_sentinal_base_attfeat':
+        model = TopDownUpAddWeightedSentinalBaseAttModel(opt)
+
 
     # base the original paper model, add a affine to att_feature
     elif opt.caption_model == 'topdown_original_2':
