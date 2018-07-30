@@ -140,10 +140,10 @@ def setup(opt):
     elif opt.caption_model == 'topdown_weighted_hidden':
         model = TopDownWeightedHiddenModel(opt)
 
-    # # top-down-cat-weighted-hidden model
-    # elif opt.caption_model == 'topdown_cat_weighted_hidden':
-    #     model = TopDownCatWeightedSentinalModel(opt)
-    #
+    # top-down-cat-weighted-hidden model
+    elif opt.caption_model == 'topdown_cat_weighted_hidden':
+        model = TopDownCatWeightedHiddenModel(opt)
+
     # # topdown_up_cat_weighted_hidden
     # elif opt.caption_model == 'topdown_up_cat_weighted_hidden':
     #     model = TopDownUpCatWeightedSentinalModel(opt)
