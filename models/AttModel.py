@@ -917,10 +917,17 @@ class TopDownUpCatWeightedSentinalCore(nn.Module):
 
         self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
 
+        # output
+        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.output_relu = nn.ReLU()
+
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
         model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
+        model_utils.kaiming_normal('relu', 0, self.h2_affine, self.ws_affine)
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -940,7 +947,11 @@ class TopDownUpCatWeightedSentinalCore(nn.Module):
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))    # batch*rnn_size
 
         weighted_sentinal = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
-        output = torch.cat([F.dropout(h_lang, self.drop_prob_lm, self.training), F.dropout(weighted_sentinal, self.drop_prob_lm, self.training)], 1)  # batch_size * 2rnn_size
+
+        affined = self.output_relu(self.h2_affine(F.dropout(h_lang, self.drop_prob_lm, self.training)) + self.ws_affine(
+            F.dropout(weighted_sentinal, self.drop_prob_lm, self.training)))        # batch_size * rnn_size
+
+        output = F.dropout(affined, self.drop_prob_lm, self.training)       # batch_size * rnn_size
 
         state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
@@ -1781,10 +1792,6 @@ class TopDownUpCatWeightedSentinalModel(AttModel):
         super(TopDownUpCatWeightedSentinalModel, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownUpCatWeightedSentinalCore(opt)
-
-        del self.logit
-        self.logit = nn.Linear(2*self.rnn_size, self.vocab_size + 1)
-        model_utils.kaiming_normal('relu', 0, self.logit)
 
 class TopDownUpAddWeightedSentinalModel(AttModel):
     def __init__(self, opt):
