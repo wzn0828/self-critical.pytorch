@@ -920,13 +920,12 @@ class TopDownUpCatWeightedSentinalCore(nn.Module):
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.output_relu = nn.ReLU()
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
         model_utils.xavier_uniform('sigmoid', self.i2h_2, self.h2h_2)
-        model_utils.kaiming_normal('relu', 0, self.h2_affine, self.ws_affine)
+        model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
 
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
@@ -948,8 +947,7 @@ class TopDownUpCatWeightedSentinalCore(nn.Module):
 
         weighted_sentinal = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
 
-        affined = self.output_relu(self.h2_affine(F.dropout(h_lang, self.drop_prob_lm, self.training)) + self.ws_affine(
-            F.dropout(weighted_sentinal, self.drop_prob_lm, self.training)))        # batch_size * rnn_size
+        affined = self.h2_affine(h_lang) + self.ws_affine(weighted_sentinal)        # batch_size * rnn_size
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)       # batch_size * rnn_size
 
