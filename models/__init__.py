@@ -149,6 +149,20 @@ def setup(opt):
         model = TopDownUpCatWeightedHiddenModel(opt)
 
 
+    # topdown_up_cat_weighted_hidden
+    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_1':
+        model = TopDownUpCatWeightedHiddenModel_1(opt)
+    # topdown_up_cat_weighted_hidden
+    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_2':
+        model = TopDownUpCatWeightedHiddenModel_2(opt)
+    # topdown_up_cat_weighted_hidden
+    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_3':
+        model = TopDownUpCatWeightedHiddenModel_3(opt)
+    # topdown_up_cat_weighted_hidden
+    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_4':
+        model = TopDownUpCatWeightedHiddenModel_4(opt)
+
+
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
 
