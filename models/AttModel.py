@@ -1207,8 +1207,8 @@ class TopDownUpCatWeightedHiddenCore2(nn.Module):
         self.sentinal_embed2 = lambda x: x
 
         # output
-        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size/2)
-        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size/2)
+        self.h2_affine = nn.Linear(opt.rnn_size, int(opt.rnn_size/2))
+        self.ws_affine = nn.Linear(opt.rnn_size, int(opt.rnn_size/2))
         self.drop = nn.Dropout(self.drop_prob_lm)
 
         # initialization
@@ -1328,8 +1328,8 @@ class TopDownUpCatWeightedHiddenCore4(nn.Module):
         self.sentinal_embed2 = lambda x: x
 
         # output
-        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size/2)
-        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size/2)
+        self.h2_affine = nn.Linear(opt.rnn_size, int(opt.rnn_size/2))
+        self.ws_affine = nn.Linear(opt.rnn_size, int(opt.rnn_size/2))
         self.drop = nn.Dropout(self.drop_prob_lm)
         self.tgh = nn.Tanh()
 
