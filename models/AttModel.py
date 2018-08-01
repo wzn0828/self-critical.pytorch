@@ -175,7 +175,9 @@ class AttModel(CaptionModel):
             lan_hiddens.append(state[0][1])
             sentinals.append(state[-1][0])
 
-        return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(sentinals)
+        # return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
+        #     sentinals)
+        return outputs, p_fc_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(sentinals)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
         # 'it' contains a word index

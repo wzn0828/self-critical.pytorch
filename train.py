@@ -145,7 +145,8 @@ def train(opt):
             # add some middle variable histogram
             if iteration % (4*opt.losses_log_every) == 0:
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
-                results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
+                # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
+                results, p_fc_feats, att_hiddens, lan_hiddens, sentinels = outputs
                 # add original fc_feats histogram
                 tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
 
@@ -155,8 +156,8 @@ def train(opt):
                 # add affined fc_feats histogram
                 tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
 
-                # add affined att_feat histogram
-                tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+                # # add affined att_feat histogram
+                # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
 
                 # add att_hiddens histogram
                 tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
