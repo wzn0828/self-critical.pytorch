@@ -1257,6 +1257,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         super(TopDownUpCatWeightedHiddenCore3, self).__init__()
         self.drop_prob_lm = opt.drop_prob_lm
         self.drop_prob_rnn = opt.drop_prob_rnn
+        self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size) # we, fc, h^2_t-1
@@ -1271,7 +1272,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.drop = nn.Dropout(self.drop_prob_lm)
+        self.drop = nn.Dropout(self.drop_prob_output)
         self.tgh = nn.Tanh()
 
         # initialization
