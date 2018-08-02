@@ -163,6 +163,12 @@ def setup(opt):
         model = TopDownUpCatWeightedHiddenModel_4(opt)
 
 
+    # topdown_up_cat_average_hidden
+    elif opt.caption_model == 'topdown_up_cat_average_hidden':
+        model = TopDownUpCatAverageHiddenModel(opt)
+
+
+
     # topdown_2layer_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_2layer_up_cat_weighted_hidden':
         model = TopDown2LayerUpCatWeightedHiddenModel(opt)
