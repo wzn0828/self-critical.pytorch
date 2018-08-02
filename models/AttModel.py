@@ -1349,7 +1349,8 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
-        model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine, self.sentinal_embed1)
+        model_utils.xavier_normal('linear', self.sentinal_embed_lang, self.sentinal_embed_att)
+        model_utils.xavier_uniform('tanh', self.h2_affine, self.ws_affine, self.h1_affine, self.ws_att_affine)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -1366,7 +1367,7 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
 
         # att layer history output
         weighted_sentinal_att = self.sen_attention_att(h_att, sentinal_att)  # batch_size * rnn_size
-        h_att_ws = self.h1_affine(self.drop(h_att)) + self.ws_att_affine(self.drop(weighted_sentinal_att)) # batch_size * rnn_size
+        h_att_ws = self.tgh(self.h1_affine(self.drop(h_att)) + self.ws_att_affine(self.drop(weighted_sentinal_att))) # batch_size * rnn_size
 
         lang_lstm_input = torch.cat([att, F.dropout(h_att_ws, self.drop_prob_rnn, self.training)], 1)    # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
