@@ -146,7 +146,7 @@ def train(opt):
             if iteration % (4*opt.losses_log_every) == 0:
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
                 # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
-                results, p_fc_feats, att_hiddens, lan_hiddens, sentinels = outputs
+                results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels = outputs
                 # add original fc_feats histogram
                 tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
 
@@ -165,8 +165,11 @@ def train(opt):
                 # add lan_hiddens histogram
                 tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
 
-                # add sentinal histogram
-                tb_summary_writer.add_histogram('sentinel', sentinels, iteration)
+                # add att_sentinel histogram
+                tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
+
+                # add lang_sentinel histogram
+                tb_summary_writer.add_histogram('lang_sentinel', lang_sentinels, iteration)
 
         else:
             gen_result, sample_logprobs = dp_model(fc_feats, att_feats, att_masks, opt={'sample_max':0}, mode='sample')
