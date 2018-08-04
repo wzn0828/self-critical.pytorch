@@ -1403,12 +1403,16 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         self.sentinal_embed_att = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
         self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_att_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.drop_att = nn.Dropout(opt.drop_prob_att)
 
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.drop = nn.Dropout(self.drop_prob_output)
-        self.tgh = nn.Tanh()
+        if opt.tgh:
+            self.tgh = nn.Tanh()
+        else:
+            self.tgh = lambda x: x
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
@@ -1431,7 +1435,7 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
 
         # att layer history output
         weighted_sentinal_att = self.sen_attention_att(h_att, sentinal_att)  # batch_size * rnn_size
-        h_att_ws = self.tgh(self.h1_affine(self.drop(h_att)) + self.ws_att_affine(self.drop(weighted_sentinal_att))) # batch_size * rnn_size
+        h_att_ws = self.tgh(self.h1_affine(self.drop_att(h_att)) + self.ws_att_affine(self.drop_att(weighted_sentinal_att))) # batch_size * rnn_size
 
         lang_lstm_input = torch.cat([att, F.dropout(h_att_ws, self.drop_prob_rnn, self.training)], 1)    # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
