@@ -1280,7 +1280,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
-        model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine, self.sentinal_embed1)
+        model_utils.xavier_normal('linear', self.sentinal_embed1)
+        model_utils.xavier_uniform('tanh', self.h2_affine, self.ws_affine)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
