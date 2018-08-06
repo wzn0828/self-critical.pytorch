@@ -1311,7 +1311,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.sen_attention = SentinalAttention(opt)
 
         # -------generate sentinal--------#
-        self.sentinal_embed1 = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
+        self.sentinal_embed1 = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
         self.sentinal_embed2 = lambda x: x
 
         # output
@@ -1339,10 +1339,30 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.tgh = nn.Tanh()
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
 
+
+        if opt.sentinel_nonlinear == 'relu':
+            self.sentinel_nonlinear = nn.ReLU()
+            model_utils.kaiming_normal('relu', 0, self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'prelu':
+            self.sentinel_nonlinear = nn.PReLU()
+            model_utils.kaiming_normal('leaky_relu', 0.25, self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'lecun_tanh':
+            self.sentinel_nonlinear = lambda x: 1.7159 * F.tanh((2.0 / 3.0) * x)
+            model_utils.xavier_uniform('tanh', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'maxout':
+            del self.sentinal_embed1
+            self.sentinal_embed1 = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
+            self.sentinel_nonlinear = lambda x: torch.max(x.narrow(1, 0, self.rnn_size),
+                                           x.narrow(1, self.rnn_size, self.rnn_size))
+            model_utils.xavier_normal('linear', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'tanh':
+            self.sentinel_nonlinear = nn.Tanh()
+            model_utils.xavier_normal('tanh', self.sentinal_embed1)
+
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
-        model_utils.xavier_normal('linear', self.sentinal_embed1)
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -1372,9 +1392,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
         # --start-------generate recurrent--------#
-        sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* 2rnn_size
-        sentinal_current = torch.max(sentinal_current.narrow(1, 0, self.rnn_size),
-                                     sentinal_current.narrow(1, self.rnn_size, self.rnn_size))  # batch* rnn_size
+        sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
+        sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
         state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
         # --end-------generate recurrent--------#
 
