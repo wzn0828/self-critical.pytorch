@@ -1335,9 +1335,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.tgh = lambda x: torch.max(x.narrow(1, 0, self.rnn_size),
                                            x.narrow(1, self.rnn_size, self.rnn_size))
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
-        else:
+        elif opt.nonlinear == 'tanh':
             self.tgh = nn.Tanh()
-            model_utils.xavier_uniform('tanh', self.h2_affine, self.ws_affine)
+            model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
