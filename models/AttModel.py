@@ -1358,6 +1358,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif opt.sentinel_nonlinear == 'tanh':
             self.sentinel_nonlinear = nn.Tanh()
             model_utils.xavier_normal('tanh', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'x':
+            del self.sentinal_embed1
+            self.sentinal_embed1 = lambda x: x
+            self.sentinel_nonlinear = lambda x: x
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
