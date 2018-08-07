@@ -1484,6 +1484,7 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         self.attention = Attention(opt)
         self.sen_attention_lang = SentinalAttention(opt)
 
+        self.lang_first = opt.lang_first
         # -------generate sentinal--------#
         self.sentinal_embed_lang = lambda x: x
 
@@ -1518,12 +1519,15 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
 
         h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))  # both are [batch_size, rnn_size]
 
-        att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
-
         # att layer history output
         weighted_sentinal_att = self.sen_attention_att(h_att, sentinal_att)  # batch_size * rnn_size
         h_att_ws = self.tgh(self.h1_affine(self.drop_att(h_att)) + self.ws_att_affine(
             self.drop_att(weighted_sentinal_att)))  # batch_size * rnn_size
+
+        if self.lang_first:
+            att = self.attention(h_att_ws, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
+        else:
+            att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
         lang_lstm_input = torch.cat([att, F.dropout(h_att_ws, self.drop_prob_rnn, self.training)],
                                     1)  # batch_size * 2rnn_size
