@@ -1485,11 +1485,11 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         self.sen_attention_lang = SentinalAttention(opt)
 
         # -------generate sentinal--------#
-        self.sentinal_embed_lang = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
+        self.sentinal_embed_lang = lambda x: x
 
         # -------generate sentinal att layer--------#
         self.sen_attention_att = SentinalAttention(opt)
-        self.sentinal_embed_att = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
+        self.sentinal_embed_att = lambda x: x
         self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_att_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.drop_att = nn.Dropout(opt.drop_prob_att)
@@ -1498,16 +1498,14 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.drop = nn.Dropout(self.drop_prob_output)
-        if opt.tgh:
-            self.tgh = nn.Tanh()
-        else:
-            self.tgh = lambda x: x
+
+        self.tgh = nn.Tanh()
+        model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine, self.h1_affine, self.ws_att_affine)
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
-        model_utils.xavier_normal('linear', self.sentinal_embed_lang, self.sentinal_embed_att)
-        model_utils.xavier_uniform('tanh', self.h2_affine, self.ws_affine, self.h1_affine, self.ws_att_affine)
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
@@ -1543,13 +1541,8 @@ class TopDown2LayerUpCatWeightedHiddenCore(nn.Module):
         state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
         # --start-------generate recurrent--------#
-        sentinal_att = self.sentinal_embed_att(h_att)  # batch* 2rnn_size
-        sentinal_att = torch.max(sentinal_att.narrow(1, 0, self.rnn_size),
-                                 sentinal_att.narrow(1, self.rnn_size, self.rnn_size))  # batch* rnn_size
-
-        sentinal_lang = self.sentinal_embed_lang(h_lang)  # batch* 2rnn_size
-        sentinal_lang = torch.max(sentinal_lang.narrow(1, 0, self.rnn_size),
-                                  sentinal_lang.narrow(1, self.rnn_size, self.rnn_size))  # batch* rnn_size
+        sentinal_att = self.sentinal_embed_att(h_att)  # batch* rnn_size
+        sentinal_lang = self.sentinal_embed_lang(h_lang)  # batch* rnn_size
 
         state = state + tuple(pre_sentinal) + (torch.stack([sentinal_att, sentinal_lang]),)
         # --end-------generate recurrent--------#
