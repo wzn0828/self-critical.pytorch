@@ -1581,7 +1581,7 @@ class TopDownAttLayerUpCatWeightedHiddenCore(nn.Module):
         # output
         # self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         # self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.drop = nn.Dropout(self.drop_prob_output)
+        # self.drop = nn.Dropout(self.drop_prob_output)
 
         self.tgh = nn.Tanh()
         model_utils.xavier_normal('linear', self.h1_affine, self.ws_att_affine)
