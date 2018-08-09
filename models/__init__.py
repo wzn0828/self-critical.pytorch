@@ -173,6 +173,12 @@ def setup(opt):
     elif opt.caption_model == 'topdown_2layer_up_cat_weighted_hidden':
         model = TopDown2LayerUpCatWeightedHiddenModel(opt)
 
+
+    # topdown_2layer_up_cat_weighted_hidden
+    elif opt.caption_model == 'topdown_attlayer_up_cat_weighted_hidden':
+        model = TopDownAttLayerUpCatWeightedHiddenModel(opt)
+
+
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
 
