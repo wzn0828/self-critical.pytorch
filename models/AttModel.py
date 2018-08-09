@@ -498,6 +498,40 @@ class TopDownCore(nn.Module):
         return output, state
 
 
+class BottomUpCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(BottomUpCore, self).__init__()
+        self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_rnn = opt.drop_prob_rnn
+
+        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
+        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
+        # self.attention = Attention(opt)
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, average_att_feat, att_masks=None):
+        prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
+        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))  # both are [batch_size, rnn_size]
+
+        # att = self.attention(h_att, att_feats, p_att_feats, att_masks)
+
+        # lang_lstm_input = torch.cat([att, h_att], 1)    # batch_size * 2rnn_size
+        # lang_lstm_input = F.dropout(lang_lstm_input, self.drop_prob_rnn, self.training)
+        lang_lstm_input = torch.cat([average_att_feat, F.dropout(h_att, self.drop_prob_rnn, self.training)], 1)  # ?????
+
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
+
+        output = F.dropout(h_lang, self.drop_prob_lm, self.training)
+        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
+        return output, state
+
+
 class TopDownOriginalCore(TopDownCore):
     def __init__(self, opt, use_maxout=False):
         super(TopDownOriginalCore, self).__init__(opt)
@@ -2670,6 +2704,24 @@ class TopDownUpAddWeightedSentinalBaseAttModel(AttModel):
         logprobs = F.log_softmax(self.logit(output), dim=1)  # batch*(vocab_size+1)
 
         return logprobs, state
+
+
+class BottomUpModel(AttModel):
+    def __init__(self, opt):
+        super(BottomUpModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = BottomUpCore(opt)
+
+    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
+        # 'it' contains a word index
+        xt = self.embed(it)  # [batch_size, input_encoding_size]
+        output, state = self.core(xt, fc_feats, att_feats, p_att_feats, state, average_att_feat,
+                                  att_masks)  # batch*rn_size
+        logprobs = F.log_softmax(self.logit(output), dim=1)  # batch*(vocab_size+1)
+
+        return logprobs, state
+
+
 
 
 class TopDownCatWeightedSentinalBaseAttModel(AttModel):
