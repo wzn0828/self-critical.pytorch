@@ -258,7 +258,7 @@ class AttModel(CaptionModel):
             if t == 0:  # input <bos>
                 it = fc_feats.new_zeros(batch_size, dtype=torch.long)
 
-            logprobs, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,
+            logprobs, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
                                                       state)  # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
 
             if decoding_constraint and t > 0:
