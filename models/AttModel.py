@@ -249,7 +249,7 @@ class AttModel(CaptionModel):
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)  # (2*batch*rnn_size, 2*batch*rnn_size)
 
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks = self._prepare_feature(fc_feats, att_feats,
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats, att_feats,
                                                                                    att_masks)  # batch*rnn_size, batch*36*rnn_size, batch*36*att_hid_size
 
         seq = fc_feats.new_zeros((batch_size, self.seq_length), dtype=torch.long)  # batch*16
