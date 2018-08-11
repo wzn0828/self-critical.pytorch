@@ -70,9 +70,9 @@ def parse_opt():
                     help='strength of dropout in the Language Model RNN')
     parser.add_argument('--drop_prob_rnn', type=float, default=0.5,
                         help='strength of dropout in the Language Model RNN hidden states')
-    parser.add_argument('--drop_prob_output', type=float, default=0.2,
+    parser.add_argument('--drop_prob_output', type=float, default=0,
                         help='strength of dropout in the Language Model output affine')
-    parser.add_argument('--drop_prob_att', type=float, default=0.2,
+    parser.add_argument('--drop_prob_att', type=float, default=0,
                         help='strength of dropout in the Language Model attention layer')
     parser.add_argument('--self_critical_after', type=int, default=-1,
                     help='After what epoch do we start finetuning the CNN? (-1 = disable; never finetune, 0 = finetune from start)')
