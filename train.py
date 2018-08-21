@@ -288,9 +288,9 @@ def train(opt):
                     with open(os.path.join(opt.checkpoint_path, 'infos_'+opt.id+'-best.pkl'), 'wb') as f:
                         cPickle.dump(infos, f)
 
-        # Stop if reaching max epochs
-        if epoch >= opt.max_epochs and opt.max_epochs != -1:
-            break
+        # # Stop if reaching max epochs
+        # if epoch >= opt.max_epochs and opt.max_epochs != -1:
+        #     break
 
         if iteration >= opt.max_iter:
             break
