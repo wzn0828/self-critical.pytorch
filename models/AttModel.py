@@ -1342,7 +1342,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
         self.attention = Attention(opt)
-        self.sen_attention = SentinalAttention(opt)
+        if opt.weighted_hidden:
+            self.sen_attention = SentinalAttention(opt)
+        else:
+            self.sen_attention = self.average_hiddens
 
         # -------generate sentinal--------#
         self.sentinal_embed1 = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
@@ -1401,7 +1404,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
 
-
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
         sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1)  # [batch_size, num_recurrent, rnn_size]
@@ -1437,6 +1439,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         return output, state
 
+    def average_hiddens(self, h_lang, hiddens):
+        weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
+        return weighted_sentinal
 
 class TopDownUpCatAverageHiddenCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
