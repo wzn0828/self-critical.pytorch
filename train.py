@@ -11,6 +11,7 @@ import math
 import time
 import os
 from six.moves import cPickle
+from copy import deepcopy
 
 import opts
 import models
@@ -29,6 +30,13 @@ except ImportError:
 def add_summary_value(writer, key, value, iteration):
     if writer:
         writer.add_scalar(key, value, iteration)
+
+# def flatten_params(model):
+#     return torch.cat([param.data.view(-1) for param in model.parameters()], 0)
+
+def load_params(model, avg_p_list):
+    for p, avg_p in zip(model.parameters(), avg_p_list):
+        p.data.copy_(avg_p)
 
 def train(opt):
     print('Checkpoint path is ' + opt.checkpoint_path)
@@ -76,6 +84,7 @@ def train(opt):
     loader.split_ix = infos.get('split_ix', loader.split_ix)
     if opt.load_best_score == 1:
         best_val_score = infos.get('best_val_score', None)
+        best_val_score_ave_model = infos.get('best_val_score_ave_model', None)
 
     model = models.setup(opt).cuda()
     dp_model = torch.nn.DataParallel(model)
@@ -91,6 +100,9 @@ def train(opt):
     # Load the optimizer
     if vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
+
+    # initialize the running average of parameters
+    avg_param = deepcopy(list(p.data for p in model.parameters()))
 
     while True:
         if update_lr_flag:
@@ -185,6 +197,10 @@ def train(opt):
         train_loss = loss.item()
         torch.cuda.synchronize()
         end = time.time()
+
+        # compute the running average of parameters
+        for p, avg_p in zip(model.parameters(), avg_param):
+            avg_p.mul_(0.9).add_(0.1, p.data)
 
         if iteration%10==0:
             if not sc_flag:
@@ -287,6 +303,64 @@ def train(opt):
                     print("model saved to {}".format(checkpoint_path))
                     with open(os.path.join(opt.checkpoint_path, 'infos_'+opt.id+'-best.pkl'), 'wb') as f:
                         cPickle.dump(infos, f)
+
+        # make evaluation with the averaged parameters model
+        if iteration > opt.ave_threshold and (iteration % opt.save_checkpoint_every == 0):
+            original_param = deepcopy(list(p.data for p in model.parameters()))  # save current params
+            load_params(model, avg_param)  # load the average
+
+            # eval model on training data
+            eval_kwargs = {'split': 'train_eval',
+                           'dataset': opt.input_json}
+            eval_kwargs.update(vars(opt))
+            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+
+            # Write train_eval result into summary
+            add_summary_value(tb_summary_writer, 'validation_loss/train_ave_model', train_eval_loss, iteration)
+            if lang_stats is not None:
+                for k, v in lang_stats.items():
+                    add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
+
+            # eval model
+            eval_kwargs = {'split': 'val',
+                           'dataset': opt.input_json}
+            eval_kwargs.update(vars(opt))
+            val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+
+            # Write validation result into summary
+            add_summary_value(tb_summary_writer, 'validation_loss/val_ave_model', val_loss, iteration)
+            if lang_stats is not None:
+                for k, v in lang_stats.items():
+                    add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
+
+            # Save model if is improving on validation result
+            if opt.language_eval == 1:
+                current_score = lang_stats['CIDEr']
+            else:
+                current_score = - val_loss
+
+            best_flag = False
+            if best_val_score_ave_model is None or current_score >= best_val_score_ave_model:
+                best_val_score_ave_model = current_score
+                best_flag = True
+            checkpoint_path = os.path.join(opt.checkpoint_path, 'ave_model.pth')
+            torch.save(model.state_dict(), checkpoint_path)
+            print("model saved to {}".format(checkpoint_path))
+
+            # Dump miscalleous informations
+            infos['best_val_score_ave_model'] = best_val_score_ave_model
+            with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '.pkl'), 'wb') as f:
+                cPickle.dump(infos, f)
+
+            if best_flag:
+                checkpoint_path = os.path.join(opt.checkpoint_path, 'ave-best.pth')
+                torch.save(model.state_dict(), checkpoint_path)
+                print("model saved to {}".format(checkpoint_path))
+                with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '-ave_model-best.pkl'), 'wb') as f:
+                    cPickle.dump(infos, f)
+
+            load_params(model, original_param)  # restore parameters
+
 
         # # Stop if reaching max epochs
         # if epoch >= opt.max_epochs and opt.max_epochs != -1:
