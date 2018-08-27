@@ -50,11 +50,11 @@ class DataLoaderTest():
                 self.fc_files.append(fullpath)
                 att_fullpath = os.path.join(self.input_att_dir, file[:-1]+'z')
                 self.att_files.append(att_fullpath)
-                self.ids.append(str(n))  # just order them sequentially
+                self.ids.append(int(file.split('.')[0]))  # just order them sequentially
                 n = n + 1
 
         self.N = len(self.fc_files)
-        print('DataLoaderRaw found ', self.N, ' images')
+        print('DataLoaderTest found ', self.N, ' images')
 
         self.iterator = 0
 
