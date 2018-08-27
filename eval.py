@@ -89,12 +89,12 @@ parser.add_argument('--verbose_loss', type=int, default=0,
 opt = parser.parse_args()
 
 # ----- for my local set ----- #
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 opt.dump_images = 0
 opt.num_images = -1
-opt.model = 'Experiments/215/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/model-best.pth'
-opt.infos_path = 'Experiments/215/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/infos_BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0-best.pkl'
-opt.language_eval = 0
+opt.model = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/model-best.pth'
+opt.infos_path = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/infos_BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0-best.pkl'
+opt.language_eval = 1
 opt.beam_size = 5
 opt.batch_size = 1200
 
@@ -107,7 +107,6 @@ opt.split = 'raw_val'
 # opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
 opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
 opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
-
 # ----- for my local set ----- #
 
 # Load infos
