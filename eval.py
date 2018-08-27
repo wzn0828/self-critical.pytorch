@@ -19,6 +19,8 @@ import misc.utils as utils
 import torch
 
 # Input arguments and options
+from test import DataLoaderTest
+
 parser = argparse.ArgumentParser()
 # Input paths
 parser.add_argument('--model', type=str, default='',
@@ -89,16 +91,33 @@ opt = parser.parse_args()
 # ----- for my local set ----- #
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 opt.dump_images = 0
-opt.num_images = 5000
-opt.model = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/att2in2_rnn1000_rl/model-best.pth'
-opt.infos_path = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/att2in2_rnn1000_rl/infos_att2in2_rnn1000_rl-best.pkl'
-opt.language_eval = 1
+opt.num_images = -1
+opt.model = 'Experiments/215/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/model-best.pth'
+opt.infos_path = 'Experiments/215/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/infos_BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0-best.pkl'
+opt.language_eval = 0
 opt.beam_size = 5
+opt.batch_size = 1200
+
+opt.weighted_hidden = True
+
+opt.testOrnot = False
+#opt.split = None
+opt.split = 'raw_val'
+# opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_fc'
+# opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
+opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
+opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+
 # ----- for my local set ----- #
 
 # Load infos
 with open(opt.infos_path) as f:
     infos = cPickle.load(f)
+
+# ----- for my local set ----- #
+opt.input_box_dir = infos['opt'].input_box_dir
+opt.input_label_h5 = infos['opt'].input_label_h5
+# ----- for my local set ----- #
 
 # override and collect parameters
 if len(opt.input_fc_dir) == 0:
@@ -112,7 +131,7 @@ if opt.batch_size == 0:
     opt.batch_size = infos['opt'].batch_size
 if len(opt.id) == 0:
     opt.id = infos['opt'].id
-ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval"]
+ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval", "input_fc_dir", "input_att_dir"]
 for k in vars(infos['opt']).keys():
     if k not in ignore:
         if k in vars(opt):
@@ -132,9 +151,12 @@ crit = utils.LanguageModelCriterion()
 
 # Create the Data Loader instance
 if len(opt.image_folder) == 0:
-  loader = DataLoader(opt)
+    if opt.testOrnot:
+        loader = DataLoaderTest(opt)
+    else:
+        loader = DataLoader(opt)
 else:
-  loader = DataLoaderRaw({'folder_path': opt.image_folder, 
+    loader = DataLoaderRaw({'folder_path': opt.image_folder,
                             'coco_json': opt.coco_json,
                             'batch_size': opt.batch_size,
                             'cnn_model': opt.cnn_model})
