@@ -138,7 +138,8 @@ def train(opt):
                 
         start = time.time()
         # Load data from train split (0)
-        data = loader.get_batch('train')
+        # data = loader.get_batch('train')
+        data = loader.get_batch('raw_train')
         # print('Read data:', time.time() - start)
 
         torch.cuda.synchronize()
@@ -250,8 +251,8 @@ def train(opt):
                     add_summary_value(tb_summary_writer, k+'/train', v, iteration)
 
             # eval model
-            eval_kwargs = {'split': 'val',
-                            'dataset': opt.input_json}
+            eval_kwargs = {'split': 'online_val',
+                           'dataset': opt.input_json}
             eval_kwargs.update(vars(opt))
             val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
 
@@ -322,7 +323,9 @@ def train(opt):
                     add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
 
             # eval model
-            eval_kwargs = {'split': 'val',
+            # eval_kwargs = {'split': 'val',
+            #                'dataset': opt.input_json}
+            eval_kwargs = {'split': 'online_val',
                            'dataset': opt.input_json}
             eval_kwargs.update(vars(opt))
             val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
