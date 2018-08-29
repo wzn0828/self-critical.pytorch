@@ -135,6 +135,8 @@ def parse_opt():
                     help='an id identifying this run/job. used in cross-val and appended when writing progress files')
     parser.add_argument('--train_only', type=int, default=0,
                     help='if true then use 80k, else use 110k')
+    parser.add_argument('--beta', type=float, default=0.998,
+                        help='the beta in ExponentialMovingAverage')
 
 
     # Reward

@@ -201,7 +201,7 @@ def train(opt):
 
         # compute the running average of parameters
         for p, avg_p in zip(model.parameters(), avg_param):
-            avg_p.mul_(0.9).add_(0.1, p.data)
+            avg_p.mul_(opt.beta).add_((1.0-opt.beta), p.data)
 
         if iteration%10==0:
             if not sc_flag:
