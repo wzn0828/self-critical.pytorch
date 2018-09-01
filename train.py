@@ -378,12 +378,12 @@ opt = opts.parse_opt()
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ["OMP_NUM_THREADS"] = "1"
 # net
-opt.id = 'debug'
+opt.id = 'BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
 opt.caption_model = 'topdown_up_cat_weighted_hidden_3'
 opt.rnn_size = 512
 opt.input_encoding_size = 512
-opt.drop_prob_lm = 0.5
-opt.drop_prob_rnn = 0.5
+opt.drop_prob_lm = 0
+opt.drop_prob_rnn = 0
 opt.use_bn = 2
 opt.fc_use_bn = 2
 opt.drop_prob_output = 0.2
@@ -392,7 +392,10 @@ opt.nonlinear = 'tanh'   # relu, prelu, lecun_tanh, maxout, tanh
 opt.sentinel_nonlinear = 'x'    # relu, prelu, lecun_tanh, maxout, tanh, x
 opt.weighted_hidden = True
 
-opt.ave_threshold = 0
+opt.ave_threshold = 130000
+
+opt.load_best = 1
+opt.start_from = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
 
 # data
 opt.input_json = 'data/cocotalk.json'
@@ -409,12 +412,12 @@ opt.optim_alpha = 0.9
 opt.max_iter = 150000
 opt.beam_size = 5
 
-opt.checkpoint_path = 'Experiments/debug'
-opt.scheduled_sampling_start = 0
-opt.save_checkpoint_every = 20
-opt.val_images_use = 20
-opt.train_eval_images_use = 20
-opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
+opt.checkpoint_path = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
+#opt.scheduled_sampling_start = 0
+opt.save_checkpoint_every = 6000
+opt.val_images_use = -1
+opt.train_eval_images_use = 1280
+#opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
 opt.language_eval = 1
 #----for my local set----#
 
