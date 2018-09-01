@@ -100,13 +100,14 @@ opt.batch_size = 1200
 
 opt.weighted_hidden = True
 
-opt.testOrnot = False
-#opt.split = None
-opt.split = 'raw_val'
-# opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_fc'
-# opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
-opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
-opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+opt.testOrnot = True
+opt.split = None
+# opt.split = 'raw_val'
+opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_fc'
+opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
+# opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
+# opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+
 # ----- for my local set ----- #
 
 # Load infos
@@ -117,6 +118,7 @@ with open(opt.infos_path) as f:
 opt.input_box_dir = infos['opt'].input_box_dir
 opt.input_label_h5 = infos['opt'].input_label_h5
 # ----- for my local set ----- #
+
 
 # override and collect parameters
 if len(opt.input_fc_dir) == 0:
@@ -174,4 +176,14 @@ if lang_stats:
 
 if opt.dump_json == 1:
     # dump the json
-    json.dump(split_predictions, open('vis/vis.json', 'w'))
+    cache_path = os.path.join('vis/', opt.id)
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+    if opt.split == None:
+        split = 'test'
+    elif opt.split == 'raw_val':
+        split = 'val'
+    else:
+        split = opt.split
+    cache_path = os.path.join(cache_path, 'captions_%s2014_LanguageAttention_results'%split + '.json')
+    json.dump(split_predictions, open(cache_path, 'w'))

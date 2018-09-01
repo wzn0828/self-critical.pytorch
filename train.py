@@ -375,25 +375,24 @@ opt = opts.parse_opt()
 
 
 #----for my local set----#
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ["OMP_NUM_THREADS"] = "1"
 # net
-opt.id = 'BUTD-B64-UpCWH_3-D0.2-2l-langfirst-D0.2-RL'
-opt.caption_model = 'topdown_2layer_up_cat_weighted_hidden'
+opt.id = 'debug'
+opt.caption_model = 'topdown_up_cat_weighted_hidden_3'
 opt.rnn_size = 512
 opt.input_encoding_size = 512
-opt.drop_prob_lm = 0.3
-opt.drop_prob_rnn = 0
+opt.drop_prob_lm = 0.5
+opt.drop_prob_rnn = 0.5
 opt.use_bn = 2
 opt.fc_use_bn = 2
-opt.drop_prob_output = 0
+opt.drop_prob_output = 0.2
 
-opt.drop_prob_att = 0
-opt.lang_first = True
+opt.nonlinear = 'tanh'   # relu, prelu, lecun_tanh, maxout, tanh
+opt.sentinel_nonlinear = 'x'    # relu, prelu, lecun_tanh, maxout, tanh, x
+opt.weighted_hidden = True
 
-opt.load_best = 0
-opt.self_critical_after = 0
-opt.start_from = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/BUTD-B64-UpCWH_3-D0.2-2l-langfirst-D0.2-RL'
+opt.ave_threshold = 0
 
 # data
 opt.input_json = 'data/cocotalk.json'
@@ -402,19 +401,19 @@ opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/t
 opt.input_label_h5 = 'data/cocotalk_label.h5'
 
 # optimization
-opt.batch_size = 32
+opt.batch_size = 10
 opt.optim = 'adam'
-opt.learning_rate = 5e-5
-#opt.learning_rate_decay_start = 0
+opt.learning_rate = 5e-4
+opt.learning_rate_decay_start = 0
 opt.optim_alpha = 0.9
-opt.max_iter = 600000
+opt.max_iter = 150000
 opt.beam_size = 5
 
-opt.checkpoint_path = 'Experiments/BUTD-B64-UpCWH_3-D0.2-2l-langfirst-D0.2-RL'
-#opt.scheduled_sampling_start = 0
-opt.save_checkpoint_every = 6000
-opt.val_images_use = 5000
-opt.train_eval_images_use = 1280
+opt.checkpoint_path = 'Experiments/debug'
+opt.scheduled_sampling_start = 0
+opt.save_checkpoint_every = 20
+opt.val_images_use = 20
+opt.train_eval_images_use = 20
 opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
 opt.language_eval = 1
 #----for my local set----#
