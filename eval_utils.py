@@ -12,8 +12,11 @@ import random
 import string
 import time
 import os
-import sys
 import misc.utils as utils
+from misc.rewards import array_to_str
+import sys
+sys.path.append("cider")
+from pyciderevalcap.ciderD.ciderD import CiderD
 
 def language_eval(dataset, preds, model_id, split):
     import sys
@@ -64,6 +67,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     lang_eval = eval_kwargs.get('language_eval', 0)
     dataset = eval_kwargs.get('dataset', 'coco')
     beam_size = eval_kwargs.get('beam_size', 1)
+    ciderd = eval_kwargs.get('ciderd', False)
 
     # Make sure in the evaluation mode
     model.eval()
@@ -75,6 +79,11 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     loss_sum = 0
     loss_evals = 1e-8
     predictions = []
+
+    # produce CiderD score for each generated caption
+    if ciderd:
+        CiderD_scorer = CiderD(df='coco-train-idxs')
+
     while True:
         data = loader.get_batch(split)
         n = n + loader.batch_size
@@ -86,7 +95,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             fc_feats, att_feats, labels, masks, att_masks = tmp
 
             with torch.no_grad():
-                loss = crit(model(fc_feats, att_feats, labels, att_masks)[0], labels[:,1:], masks[:,1:]).item()
+                loss = crit(model(fc_feats, att_feats, labels, att_masks)[0], labels[:, 1:], masks[:, 1:]).item()
             loss_sum = loss_sum + loss
             loss_evals = loss_evals + 1
 
@@ -100,7 +109,19 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         # forward the model to also get generated samples for each image
         with torch.no_grad():
             seq = model(fc_feats, att_feats, att_masks, opt=eval_kwargs, mode='sample')[0].data
-        
+
+        # fproducing the ciderd score, first producing the groudtruth file gts and the evaluated file res
+        if ciderd:
+            gts = {}
+            for i in range(len(data['gts'])):
+                gts[data['infos'][i]['id']] = [array_to_str(data['gts'][i][j]) for j in range(len(data['gts'][i]))]
+            gen_result = seq.data.cpu().numpy()
+            res = {}
+            for i in range(len(gen_result)):
+                res[data['infos'][i]['id']] = [array_to_str(gen_result[i])]
+            res_ = [{'image_id': k, 'caption': v} for k, v in res.items()]
+            _, cider_scores = CiderD_scorer.compute_score(gts, res_)
+
         # Print beam search
         if beam_size > 1 and verbose_beam:
             for i in range(loader.batch_size):
@@ -109,7 +130,11 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         sents = utils.decode_sequence(loader.get_vocab(), seq)
 
         for k, sent in enumerate(sents):
-            entry = {'image_id': data['infos'][k]['id'], 'caption': sent}
+            if ciderd:
+                entry = {'image_id': data['infos'][k]['id'], 'caption': sent, 'cider':cider_scores[k]}
+            else:
+                entry = {'image_id': data['infos'][k]['id'], 'caption': sent}
+
             if eval_kwargs.get('dump_path', 0) == 1:
                 entry['file_name'] = data['infos'][k]['file_path']
             predictions.append(entry)
@@ -120,7 +145,10 @@ def eval_split(model, crit, loader, eval_kwargs={}):
                 os.system(cmd)
 
             if verbose:
-                print('image %s: %s' %(entry['image_id'], entry['caption']))
+                if ciderd:
+                    print('image %s: %s; ciderd: %.3f' % (entry['image_id'], entry['caption'], entry['cider']))
+                else:
+                    print('image %s: %s' %(entry['image_id'], entry['caption']))
 
         # if we wrapped around the split or used up val imgs budget then bail
         ix0 = data['bounds']['it_pos_now']
