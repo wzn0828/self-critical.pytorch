@@ -126,7 +126,7 @@ def parse_opt():
                     help='Do we load previous best score when resuming training.')
     parser.add_argument('--load_best', type=int, default=0,
                     help='Do we load previous best model? (0 = disable)')
-    parser.add_argument('--train_eval_images_use', type=int, default=480,
+    parser.add_argument('--train_eval_images_use', type=int, default=1000,
                     help='how many images to use when periodically evaluating the train performance?')
 
 
