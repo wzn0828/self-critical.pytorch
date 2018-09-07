@@ -93,8 +93,6 @@ class DataLoader(data.Dataset):
         self.split_ix['online_val'] = train_eval[-1000:]
         self.split_ix['raw_train'] = list(set(self.split_ix['raw_train']) - set(self.split_ix['online_val']))
 
-        train_eval = train_eval[:-1000]
-
         # subset for evaluation of train data
         seed(123)
         self.split_ix['train_eval'] = [train_eval[i] for i in
