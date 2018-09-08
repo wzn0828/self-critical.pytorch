@@ -52,19 +52,6 @@ def setup(opt):
         model = TopDownOriginalModel(opt)
 
 
-
-    elif opt.caption_model == 'topdown_recurrent_hidden':
-        model = TopDownRecurrentHiddenModel(opt)
-
-
-    # top-down-weighted-hidden model
-    elif opt.caption_model == 'topdown_weighted_hidden':
-        model = TopDownWeightedHiddenModel(opt)
-
-    # top-down-cat-weighted-hidden model
-    elif opt.caption_model == 'topdown_cat_weighted_hidden':
-        model = TopDownCatWeightedHiddenModel(opt)
-
     # topdown_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_up_cat_weighted_hidden':
         model = TopDownUpCatWeightedHiddenModel(opt)
