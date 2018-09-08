@@ -48,14 +48,6 @@ def setup(opt):
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
 
-    # Top-down-cat-sentinal model s
-    elif opt.caption_model == 'topdown_cat_sentinal':
-        model = TopDownCatSentinalModel(opt)
-    elif opt.caption_model == 'topdown_cat_sentinal_affine':
-        model = TopDownCatSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_cat_sentinal_affine2':
-        model = TopDownCatSentinalAffine2Model(opt)
-
     # Top-down-recurrent-sentinal model s
     elif opt.caption_model == 'topdown_recurrent_sentinal':
         model = TopDownRecurrentSentinalModel(opt)
