@@ -100,7 +100,6 @@ def parse_opt():
                     help='epsilon that goes into denominator for smoothing')
     parser.add_argument('--weight_decay', type=float, default=0,
                     help='weight_decay')
-
     parser.add_argument('--scheduled_sampling_start', type=int, default=-1, 
                     help='at what iteration to start decay gt probability')
     parser.add_argument('--scheduled_sampling_increase_every', type=int, default=5, 
@@ -109,7 +108,8 @@ def parse_opt():
                     help='How much to update the prob')
     parser.add_argument('--scheduled_sampling_max_prob', type=float, default=0.25, 
                     help='Maximum scheduled sampling prob.')
-
+    parser.add_argument('--train_split', type=str, default='train',
+                        help='which split to use when training, train or raw_train')
 
     # Evaluation/Checkpointing
     parser.add_argument('--val_images_use', type=int, default=3200,
@@ -137,6 +137,8 @@ def parse_opt():
                     help='if true then use 80k, else use 110k')
     parser.add_argument('--beta', type=float, default=0.998,
                         help='the beta in ExponentialMovingAverage')
+    parser.add_argument('--vis_wgs_grads', type=bool, default=False,
+                        help='tensorboard the weights and grads')
 
 
     # Reward
