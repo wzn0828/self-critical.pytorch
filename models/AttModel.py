@@ -615,20 +615,6 @@ class TopDownSentinalAffine2Core(nn.Module):
         return output, state
 
 
-class TopDownSentinalAffineCore(TopDownSentinalAffine2Core):
-    def __init__(self, opt, use_maxout=False):
-        super(TopDownSentinalAffineCore, self).__init__(opt)
-        del self.sentinal_embed2
-        self.sentinal_embed2 = lambda x: x
-
-
-class TopDownSentinalCore(TopDownSentinalAffine2Core):
-    def __init__(self, opt, use_maxout=False):
-        super(TopDownSentinalCore, self).__init__(opt)
-        del self.sentinal_embed1, self.sentinal_embed2
-        self.sentinal_embed1 = self.sentinal_embed2 = lambda x: x
-
-
 class TopDownRecurrentHiddenCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownRecurrentHiddenCore, self).__init__()
@@ -2538,20 +2524,6 @@ class TopDownSentinalAffine2Model(AttModel):
         super(TopDownSentinalAffine2Model, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownSentinalAffine2Core(opt)
-
-
-class TopDownSentinalAffineModel(AttModel):
-    def __init__(self, opt):
-        super(TopDownSentinalAffineModel, self).__init__(opt)
-        self.num_layers = 2
-        self.core = TopDownSentinalAffineCore(opt)
-
-
-class TopDownSentinalModel(AttModel):
-    def __init__(self, opt):
-        super(TopDownSentinalModel, self).__init__(opt)
-        self.num_layers = 2
-        self.core = TopDownSentinalCore(opt)
 
 
 class TopDownRecurrentHiddenModel(AttModel):

@@ -45,10 +45,6 @@ def setup(opt):
     elif opt.caption_model == 'denseatt':
         model = DenseAttModel(opt)
     # Top-down-sentinal attention model s
-    elif opt.caption_model == 'topdown_sentinal':
-        model = TopDownSentinalModel(opt)
-    elif opt.caption_model == 'topdown_sentinal_affine':
-        model = TopDownSentinalAffineModel(opt)
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
 
