@@ -47,40 +47,9 @@ def setup(opt):
     # Top-down-sentinal attention model s
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
-
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
-
-    # top-down-cat-weighted-sentinal model
-    elif opt.caption_model == 'topdown_cat_weighted_sentinal':
-        model = TopDownCatWeightedSentinalModel(opt)
-
-
-    # topdown_cat_weighted_sentinal_base_attfeat
-    elif opt.caption_model == 'topdown_cat_weighted_sentinal_base_attfeat':
-        model = TopDownCatWeightedSentinalBaseAttModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_cat_weighted_sentinal':
-        model = TopDownUpCatWeightedSentinalModel(opt)
-
-
-    # topdown_up_add_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_add_weighted_sentinal':
-        model = TopDownUpAddWeightedSentinalModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_cat_weighted_sentinal_base_attfeat':
-        model = TopDownUpCatWeightedSentinalBaseAttModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_add_weighted_sentinal_base_attfeat':
-        model = TopDownUpAddWeightedSentinalBaseAttModel(opt)
-
 
     # base the original paper model, add a affine to att_feature
     elif opt.caption_model == 'topdown_original_2':
