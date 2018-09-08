@@ -48,23 +48,9 @@ def setup(opt):
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
 
-    elif opt.caption_model == 'topdown_weighted_sentinal_tanh_att':
-        model = TopDownWeightedSentinalModel_tanh_att(opt)
-
-    # Top-down-cat-recurrent-sentinal model s
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal':
-        model = TopDownCatRecurrentSentinalModel(opt)
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine':
-        model = TopDownCatRecurrentSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine2':
-        model = TopDownCatRecurrentSentinalAffine2Model(opt)
-
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
-
-    elif opt.caption_model == 'topdown_original_weighted_sentinel':
-        model = TopDownOriginalWeightedSentinelModel(opt)
 
     # top-down-cat-weighted-sentinal model
     elif opt.caption_model == 'topdown_cat_weighted_sentinal':
