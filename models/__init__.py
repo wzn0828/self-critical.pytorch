@@ -47,15 +47,6 @@ def setup(opt):
     # Top-down-sentinal attention model s
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
-
-    # Top-down-recurrent-sentinal model s
-    elif opt.caption_model == 'topdown_recurrent_sentinal':
-        model = TopDownRecurrentSentinalModel(opt)
-    elif opt.caption_model == 'topdown_recurrent_sentinal_affine':
-        model = TopDownRecurrentSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_recurrent_sentinal_affine2':
-        model = TopDownRecurrentSentinalAffine2Model(opt)
-
     # top-down-average-sentinal model
     elif opt.caption_model == 'topdown_average_sentinal':
         model = TopDownAverageSentinalModel(opt)
