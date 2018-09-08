@@ -545,16 +545,6 @@ class TopDownOriginalCore(TopDownCore):
         model_utils.lstm_init(self.lang_lstm)
 
 
-class TopDownOriginal2Core(TopDownOriginalCore):
-    def __init__(self, opt):
-        super(TopDownOriginal2Core, self).__init__(opt)
-        del self.lang_lstm
-        self.lang_lstm = nn.LSTMCell(2 * opt.rnn_size, opt.rnn_size)  # h^1_t, \hat v
-
-        # initialization
-        model_utils.lstm_init(self.lang_lstm)
-
-
 class TopDownSentinalAffine2Core(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownSentinalAffine2Core, self).__init__()
@@ -1745,15 +1735,6 @@ class TopDownOriginalModel(AttModel):
 
         # initialization
         model_utils.xavier_uniform('tanh', self.ctx2att)
-
-
-class TopDownOriginal2Model(AttModel):
-    def __init__(self, opt):
-        super(TopDownOriginal2Model, self).__init__(opt)
-        delattr(self, 'fc_embed')
-        self.fc_embed = lambda x: x
-        self.num_layers = 2
-        self.core = TopDownOriginal2Core(opt)
 
 
 class TopDownSentinalAffine2Model(AttModel):
