@@ -47,9 +47,6 @@ def setup(opt):
     # Top-down-sentinal attention model s
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
-    # top-down-average-sentinal model
-    elif opt.caption_model == 'topdown_average_sentinal':
-        model = TopDownAverageSentinalModel(opt)
 
     # top-down-weighted-sentinal model
     elif opt.caption_model == 'topdown_weighted_sentinal':
