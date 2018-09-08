@@ -48,10 +48,6 @@ def setup(opt):
     elif opt.caption_model == 'topdown_sentinal_affine2':
         model = TopDownSentinalAffine2Model(opt)
 
-    # top-down-weighted-sentinal model
-    elif opt.caption_model == 'topdown_weighted_sentinal':
-        model = TopDownWeightedSentinalModel(opt)
-
     elif opt.caption_model == 'topdown_weighted_sentinal_tanh_att':
         model = TopDownWeightedSentinalModel_tanh_att(opt)
 
