@@ -110,6 +110,11 @@ def parse_opt():
                     help='Maximum scheduled sampling prob.')
     parser.add_argument('--train_split', type=str, default='train',
                         help='which split to use when training, train or raw_train')
+    parser.add_argument('--train_eval_split', type=str, default='train_eval',
+                        help='which split to use when training, train or raw_train')
+    parser.add_argument('--val_split', type=str, default='val',
+                        help='which split to use when training, train or raw_train')
+
 
     # Evaluation/Checkpointing
     parser.add_argument('--val_images_use', type=int, default=3200,

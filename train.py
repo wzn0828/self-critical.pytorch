@@ -62,7 +62,7 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
     original_param = deepcopy(list(p.data for p in model.parameters()))  # save current params
     load_params(model, avg_param)  # load the average
     # eval model on training data
-    eval_kwargs = {'split': 'train_eval',
+    eval_kwargs = {'split': opt.train_eval_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
     train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
@@ -74,7 +74,7 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
     # eval model
     # eval_kwargs = {'split': 'val',
     #                'dataset': opt.input_json}
-    eval_kwargs = {'split': 'online_val',
+    eval_kwargs = {'split': opt.val_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
     val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
@@ -112,7 +112,7 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
 def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration, loader, loss_history, lr_history, model, opt,
                        optimizer, ss_prob_history, tb_summary_writer, val_result_history):
     # eval model on training data
-    eval_kwargs = {'split': 'train_eval',
+    eval_kwargs = {'split': opt.train_eval_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
     train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
@@ -122,7 +122,7 @@ def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration,
         for k, v in lang_stats.items():
             add_summary_value(tb_summary_writer, k + '/train', v, iteration)
     # eval model
-    eval_kwargs = {'split': 'online_val',
+    eval_kwargs = {'split': opt.val_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
     val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
