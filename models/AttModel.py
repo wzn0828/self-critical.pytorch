@@ -57,6 +57,7 @@ class AttModel(CaptionModel):
         self.rnn_size = opt.rnn_size
         self.num_layers = opt.num_layers
         self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_embed = opt.drop_prob_embed
         self.seq_length = opt.seq_length
         self.fc_feat_size = opt.fc_feat_size
         self.att_feat_size = opt.att_feat_size
@@ -69,8 +70,12 @@ class AttModel(CaptionModel):
         self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
                                       nn.ReLU(),) +
                                      ((nn.BatchNorm1d(self.input_encoding_size),) if opt.emb_use_bn else ()) +
-                                     (nn.Dropout(self.drop_prob_lm),)
+                                     (nn.Dropout(self.drop_prob_embed),)
                                      ))
+        # self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),) +
+        #                              ((nn.BatchNorm1d(self.input_encoding_size),) if opt.emb_use_bn else ()) +
+        #                              (nn.Dropout(self.drop_prob_embed),)
+        #                              ))
         self.fc_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.fc_feat_size),) if opt.fc_use_bn else ()) +
                 (nn.Linear(self.fc_feat_size, self.rnn_size),
@@ -622,6 +627,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.sen_attention = self.average_hiddens
 
         # -------generate sentinal--------#
+        self.transfer_horizontal = opt.transfer_horizontal
         self.sentinal_embed1 = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
         self.sentinal_embed2 = lambda x: x
 
@@ -703,7 +709,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
 
-        state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+        if self.transfer_horizontal:
+            state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
+        else:
+            state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
         # --start-------generate recurrent--------#
         sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
