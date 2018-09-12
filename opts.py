@@ -146,6 +146,9 @@ def parse_opt():
                         help='tensorboard the weights and grads')
     parser.add_argument('--tensorboard_mid_variables', type=bool, default=False,
                         help='whether tensorboard mid variables histogram')
+    parser.add_argument('--tensorboard_lang_weights', type=bool, default=False,
+                        help='whether tensorboard language attention weights histogram')
+
 
 
     # Reward
