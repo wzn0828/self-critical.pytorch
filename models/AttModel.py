@@ -67,15 +67,11 @@ class AttModel(CaptionModel):
 
         self.ss_prob = 0.0  # Schedule sampling probability
 
-        self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),
-                                      nn.ReLU(),) +
+        self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),) +
+                                     ((nn.ReLU(),) if opt.emb_relu else ()) +
                                      ((nn.BatchNorm1d(self.input_encoding_size),) if opt.emb_use_bn else ()) +
                                      (nn.Dropout(self.drop_prob_embed),)
                                      ))
-        # self.embed = nn.Sequential(*((nn.Embedding(self.vocab_size + 1, self.input_encoding_size),) +
-        #                              ((nn.BatchNorm1d(self.input_encoding_size),) if opt.emb_use_bn else ()) +
-        #                              (nn.Dropout(self.drop_prob_embed),)
-        #                              ))
         self.fc_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.fc_feat_size),) if opt.fc_use_bn else ()) +
                 (nn.Linear(self.fc_feat_size, self.rnn_size),
@@ -655,7 +651,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif opt.nonlinear == 'tanh':
             self.tgh = nn.Tanh()
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
-
 
         if opt.sentinel_nonlinear == 'relu':
             self.sentinel_nonlinear = nn.ReLU()
