@@ -151,6 +151,7 @@ class AttModel(CaptionModel):
         lang_sentinals = []
         att_hiddens = []
         lan_hiddens = []
+        lang_weights = []
 
         # Prepare the features
         p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats,
@@ -178,7 +179,7 @@ class AttModel(CaptionModel):
             if i >= 1 and seq[:, i].sum() == 0:
                 break
 
-            output, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,
+            output, state, lang_weight = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,
                                                     average_att_feat, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
@@ -186,20 +187,22 @@ class AttModel(CaptionModel):
             lan_hiddens.append(state[0][1])
             att_sentinals.append(state[-1][0])
             lang_sentinals.append(state[-1][1])
+            if i==6:
+                lang_weights.append(lang_weight)
 
         # return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
         #     sentinals)
         return outputs, p_fc_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
-            att_sentinals), torch.stack(lang_sentinals)
+            att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
         # 'it' contains a word index
         xt = self.embed(it)  # [batch_size, input_encoding_size]
 
-        output, state = self.core(xt, fc_feats, att_feats, p_att_feats, state, att_masks)  # batch*rn_size
+        output, state, lang_weights = self.core(xt, fc_feats, att_feats, p_att_feats, state, att_masks)  # batch*rn_size
         logprobs = F.log_softmax(self.logit(output), dim=1)  # batch*(vocab_size+1)
 
-        return logprobs, state
+        return logprobs, state, lang_weights
 
     def _sample_beam(self, fc_feats, att_feats, att_masks=None, opt={}):
         beam_size = opt.get('beam_size', 10)
@@ -228,7 +231,7 @@ class AttModel(CaptionModel):
                 if t == 0:  # input <bos>
                     it = fc_feats.new_zeros([beam_size], dtype=torch.long)
 
-                logprobs, state = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
+                logprobs, state, lang_weights = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
                                                           tmp_att_masks, tmp_average_att_feat, state)
 
             self.done_beams[k] = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
@@ -259,7 +262,7 @@ class AttModel(CaptionModel):
             if t == 0:  # input <bos>
                 it = fc_feats.new_zeros(batch_size, dtype=torch.long)
 
-            logprobs, state = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
+            logprobs, state, lang_weights = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
                                                       state)  # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
 
             if decoding_constraint and t > 0:
@@ -697,7 +700,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
 
-        weighted_sentinal = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
+        weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
 
         affined = self.tgh(
             self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
@@ -715,7 +718,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
         # --end-------generate recurrent--------#
 
-        return output, state
+        return output, state, lang_weights
 
     def average_hiddens(self, h_lang, hiddens):
         weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
@@ -1164,12 +1167,14 @@ class SentinalAttention(nn.Module):
         dot_senti = dot_senti.view(-1, num_hidden)  # batch * num_hidden
 
         weight_senti = F.softmax(dot_senti, dim=1)  # batch * num_hidden
+        if num_hidden == 6:
+            print('language weights when the hidden number is 7:')
+            print(weight_senti)
         weight_senti = weight_senti.unsqueeze(1)  # batch * 1 * num_hidden
-
         att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
         # --end----recurrent attention-----#
 
-        return att_res_senti  # batch * rnn_size
+        return att_res_senti, weight_senti  # batch * rnn_size, batch * num_hidden
 
 
 class O_SentinalAttention(SentinalAttention):
