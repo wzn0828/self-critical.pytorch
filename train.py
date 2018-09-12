@@ -31,25 +31,29 @@ def add_summary_value(writer, key, value, iteration):
     if writer:
         writer.add_scalar(key, value, iteration)
 
-def variables_histogram(data, iteration, outputs, tb_summary_writer):
+def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
     # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
-    results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels = outputs
-    # add original fc_feats histogram
-    tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
-    # add original att_feats histogram
-    tb_summary_writer.add_histogram('att_feat', data['att_feats'], iteration)
-    # add affined fc_feats histogram
-    tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
-    # # add affined att_feat histogram
-    # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
-    # add att_hiddens histogram
-    tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
-    # add lan_hiddens histogram
-    tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
-    # add att_sentinel histogram
-    tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
-    # add lang_sentinel histogram
-    tb_summary_writer.add_histogram('lang_sentinel', lang_sentinels, iteration)
+    results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels, lang_weights = outputs
+    if opt.tensorboard_mid_variables:
+        # add original fc_feats histogram
+        tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
+        # add original att_feats histogram
+        tb_summary_writer.add_histogram('att_feat', data['att_feats'], iteration)
+        # add affined fc_feats histogram
+        tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
+        # # add affined att_feat histogram
+        # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+        # add att_hiddens histogram
+        tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
+        # add lan_hiddens histogram
+        tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
+        # add att_sentinel histogram
+        tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
+        # add lang_sentinel histogram
+        tb_summary_writer.add_histogram('lang_sentinel', lang_sentinels, iteration)
+    if opt.tensorboard_lang_weights:
+        # add lang_weights histogram
+        tb_summary_writer.add_histogram('lang_weights', lang_weights, iteration)
 
 # def flatten_params(model):
 #     return torch.cat([param.data.view(-1) for param in model.parameters()], 0)
@@ -292,9 +296,9 @@ def train(opt):
             loss = crit(output[0], labels[:,1:], masks[:,1:])
 
             # add some middle variable histogram
-            if opt.tensorboard_mid_variables and (iteration % (4*opt.losses_log_every) == 0):
+            if iteration % (4*opt.losses_log_every) == 0:
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
-                variables_histogram(data, iteration, outputs, tb_summary_writer)
+                variables_histogram(data, iteration, outputs, tb_summary_writer, opt)
 
         else:
             gen_result, sample_logprobs = dp_model(fc_feats, att_feats, att_masks, opt={'sample_max':0}, mode='sample')
