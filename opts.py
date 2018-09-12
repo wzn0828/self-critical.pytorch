@@ -142,8 +142,10 @@ def parse_opt():
                     help='if true then use 80k, else use 110k')
     parser.add_argument('--beta', type=float, default=0.998,
                         help='the beta in ExponentialMovingAverage')
-    parser.add_argument('--vis_wgs_grads', type=bool, default=False,
+    parser.add_argument('--tensorboard_weights_grads', type=bool, default=False,
                         help='tensorboard the weights and grads')
+    parser.add_argument('--tensorboard_mid_variables', type=bool, default=False,
+                        help='whether tensorboard mid variables histogram')
 
 
     # Reward

@@ -292,7 +292,7 @@ def train(opt):
             loss = crit(output[0], labels[:,1:], masks[:,1:])
 
             # add some middle variable histogram
-            if iteration % (4*opt.losses_log_every) == 0:
+            if opt.tensorboard_mid_variables and (iteration % (4*opt.losses_log_every) == 0):
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
                 variables_histogram(data, iteration, outputs, tb_summary_writer)
 
@@ -340,7 +340,7 @@ def train(opt):
             lr_history[iteration] = opt.current_lr
             ss_prob_history[iteration] = model.ss_prob
 
-        if opt.vis_wgs_grads and (iteration % (8*opt.losses_log_every) == 0):
+        if opt.tensorboard_weights_grads and (iteration % (8*opt.losses_log_every) == 0):
             # add weights histogram to tensorboard summary
             for name, param in model.named_parameters():
                 if param.grad is not None:
