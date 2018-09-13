@@ -1147,20 +1147,42 @@ class SentinalAttention(nn.Module):
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
 
-        self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
-        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
-
-        # ----sentinal attention-----#
-        self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
-
-        # initialization
-        model_utils.xavier_uniform('tanh', self.h2att, self.senti2att)
-        model_utils.kaiming_normal('relu', 0, self.alpha_net)
+        self.att_score_method = opt.att_score_method
+        if self.att_score_method == 'mlp':
+            self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
+            self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
+            self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
+            # initialization
+            model_utils.xavier_uniform('tanh', self.h2att, self.senti2att)
+            model_utils.kaiming_normal('relu', 0, self.alpha_net)
+        elif self.att_score_method == 'general':
+            self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
+            model_utils.xavier_normal('linear', self.general_att)
+        elif self.att_score_method == 'cosine':
+            self.cos = nn.CosineSimilarity(dim=2)
 
     def forward(self, h, sentinal):
+        if self.att_score_method == 'mlp':
+            dot_senti = self.mlp_att_score(h, sentinal)
+        elif self.att_score_method == 'dot':
+            dot_senti = self.dot_att_score(h, sentinal)
+        elif self.att_score_method == 'general':
+            dot_senti = self.general_att_score(h, sentinal)
+        elif self.att_score_method == 'cosine':
+            dot_senti = self.cosine_att_score(h, sentinal)
+        elif self.att_score_method == 'scaled_dot':
+            dot_senti = self.scaled_dot_att_score(h, sentinal)
+
+        weight_senti = F.softmax(dot_senti, dim=1)  # batch * num_hidden
+        weight_senti = weight_senti.unsqueeze(1)  # batch * 1 * num_hidden
+        att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
+        # --end----recurrent attention-----#
+
+        return att_res_senti, weight_senti  # batch * rnn_size, batch * num_hidden
+
+    def mlp_att_score(self, h, sentinal):
         # sentinal's shape is batch * num_hidden * rnn_size
         num_hidden = sentinal.size(1)
-
         # --start----recurrent attention (including sentinal attention, recurrent hidden attention, recurrent sentinal attention)-----#
         att_h = self.h2att(h)  # batch * att_hid_size
         att_senti = self.senti2att(sentinal)  # batch * num_hidden * att_hid_size
@@ -1170,13 +1192,35 @@ class SentinalAttention(nn.Module):
         dot_senti = dot_senti.view(-1, self.att_hid_size)  # (batch*num_hidden) * att_hid_size
         dot_senti = self.alpha_net(dot_senti)  # (batch*num_hidden) * 1
         dot_senti = dot_senti.view(-1, num_hidden)  # batch * num_hidden
+        return dot_senti
 
-        weight_senti = F.softmax(dot_senti, dim=1)  # batch * num_hidden
-        weight_senti = weight_senti.unsqueeze(1)  # batch * 1 * num_hidden
-        att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
-        # --end----recurrent attention-----#
+    def dot_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1)      # batch*1*rnn_size
+        sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
-        return att_res_senti, weight_senti  # batch * rnn_size, batch * num_hidden
+        return torch.bmm(h, sentinal).squeeze(1)       # batch * num_hidden
+
+    def general_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1)      # batch*1*rnn_size
+        h = self.general_att(h)       # batch*1*rnn_size
+        sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
+
+        return torch.bmm(h, sentinal).squeeze(1)       # batch * num_hidden
+
+    def cosine_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1).expand_as(sentinal)      # batch * num_hidden * rnn_size
+
+        return self.cos(h, sentinal)       # batch * num_hidden
+
+    def scaled_dot_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1)      # batch*1*rnn_size
+        sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
+
+        return torch.bmm(h, sentinal).squeeze(1)/22.6      # batch * num_hidden
 
 
 class O_SentinalAttention(SentinalAttention):
