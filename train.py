@@ -54,6 +54,8 @@ def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
     if opt.tensorboard_lang_weights:
         # add lang_weights histogram
         tb_summary_writer.add_histogram('lang_weights', lang_weights, iteration)
+        print('language weights when the hidden number is 6:')
+        print(lang_weights)
 
 # def flatten_params(model):
 #     return torch.cat([param.data.view(-1) for param in model.parameters()], 0)

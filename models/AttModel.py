@@ -1167,9 +1167,6 @@ class SentinalAttention(nn.Module):
         dot_senti = dot_senti.view(-1, num_hidden)  # batch * num_hidden
 
         weight_senti = F.softmax(dot_senti, dim=1)  # batch * num_hidden
-        if num_hidden == 6:
-            print('language weights when the hidden number is 7:')
-            print(weight_senti)
         weight_senti = weight_senti.unsqueeze(1)  # batch * 1 * num_hidden
         att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
         # --end----recurrent attention-----#
