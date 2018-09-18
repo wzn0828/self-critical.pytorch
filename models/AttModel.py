@@ -617,7 +617,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.drop_prob_rnn = opt.drop_prob_rnn
         self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
-        self.ws_h0 = opt.ws_h0
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
@@ -634,7 +633,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.h2_affine_h0 = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.drop = nn.Dropout(self.drop_prob_output)
 
@@ -657,7 +655,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif opt.nonlinear == 'tanh':
             self.tgh = nn.Tanh()
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
-            model_utils.xavier_uniform('tanh', self.h2_affine_h0)
 
         if opt.sentinel_nonlinear == 'relu':
             self.sentinel_nonlinear = nn.ReLU()
@@ -704,19 +701,14 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
 
         if len(pre_sentinal) == 0:
-            if self.ws_h0 == 'h0':
-                weighted_sentinal = h_lang
-            else:
-                weighted_sentinal = torch.zeros_like(h_lang)
+            weighted_sentinal = h_lang
             lang_weights = weighted_sentinal.new_zeros((h_lang.size(0), 1))
         else:
             sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1)  # [batch_size, num_recurrent, rnn_size]
             weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
 
-        if len(pre_sentinal) == 0 and self.ws_h0 == 'none':
-            affined = self.tgh(self.h2_affine_h0(self.drop(h_lang)))
-        else:
-            affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
+        affined = self.tgh(
+            self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
 
