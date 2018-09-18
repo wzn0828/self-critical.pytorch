@@ -106,8 +106,7 @@ class AttModel(CaptionModel):
         weight = next(self.parameters())
         return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
                 weight.new_zeros(self.num_layers, bsz, self.rnn_size),
-                # weight.new_zeros(self.num_layers, bsz, self.rnn_size))  # (h0, c0, sentinal)
-                )
+                weight.new_zeros(self.num_layers, bsz, self.rnn_size))  # (h0, c0, sentinal)
         # weight.new_zeros(bsz, 1, self.rnn_size))       # (h0, c0, sentinal)
 
     def clip_att(self, att_feats, att_masks):
@@ -188,7 +187,7 @@ class AttModel(CaptionModel):
             lan_hiddens.append(state[0][1])
             att_sentinals.append(state[-1][0])
             lang_sentinals.append(state[-1][1])
-            if i == 6:
+            if i==6:
                 lang_weights.append(lang_weight)
 
         # return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
@@ -685,6 +684,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_sentinal = state[2:]
+        sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1)  # [batch_size, num_recurrent, rnn_size]
         # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
 
         prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
@@ -700,12 +700,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
 
-        if len(pre_sentinal) == 0:
-            weighted_sentinal = h_lang
-            lang_weights = weighted_sentinal.new_zeros((h_lang.size(0), 1))
-        else:
-            sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1)  # [batch_size, num_recurrent, rnn_size]
-            weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
+        weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
 
         affined = self.tgh(
             self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
