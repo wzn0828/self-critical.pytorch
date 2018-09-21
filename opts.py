@@ -148,6 +148,8 @@ def parse_opt():
                         help='whether tensorboard mid variables histogram')
     parser.add_argument('--tensorboard_lang_weights', type=bool, default=False,
                         help='whether tensorboard language attention weights histogram')
+    parser.add_argument('--language_attention', type=bool, default=False,
+                        help='whether use language attention module')
 
 
 
