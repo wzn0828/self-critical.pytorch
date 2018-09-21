@@ -42,6 +42,8 @@ def parse_opt():
                     help='2048 for resnet, 512 for vgg')
     parser.add_argument('--logit_layers', type=int, default=1,
                     help='number of layers in the RNN')
+    parser.add_argument('--tie_weights', type=bool, default=False,
+                    help='whether tie the weights of logit layer and embedding layer')
 
 
     parser.add_argument('--use_bn', type=int, default=0,

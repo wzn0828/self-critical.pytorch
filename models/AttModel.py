@@ -62,6 +62,7 @@ class AttModel(CaptionModel):
         self.fc_feat_size = opt.fc_feat_size
         self.att_feat_size = opt.att_feat_size
         self.att_hid_size = opt.att_hid_size
+        self.tie_weights = opt.tie_weights
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -88,13 +89,18 @@ class AttModel(CaptionModel):
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
         else:
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
                           range(opt.logit_layers - 1)]
             self.logit = nn.Sequential(
                 *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1)]))
         self.ctx2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+        if self.tie_weights:
+            if self.input_encoding_size != self.rnn_size:
+                raise ValueError('When using the tied flag, input_encoding_size must be equal to rnn_size')
+            self.logit.weight = self.embed[0].weight
 
         # initialization
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
@@ -654,6 +660,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'tanh':
             self.tgh = nn.Tanh()
+            model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'x':
+            self.tgh = lambda x: x
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
 
         if opt.sentinel_nonlinear == 'relu':
