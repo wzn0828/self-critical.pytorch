@@ -626,6 +626,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.rnn_size = opt.rnn_size
         self.language_attention = opt.language_attention
         self.project_hidden = opt.project_hidden
+        self.add_2_layer_hidden = opt.add_2_layer_hidden
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
@@ -691,11 +692,18 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.sentinal_embed1 = lambda x: x
             self.sentinel_nonlinear = lambda x: x
 
+        if self.add_2_layer_hidden:
+            self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+            model_utils.xavier_normal('linear', self.h1_affine)
+
         if not self.project_hidden:
             del self.h2_affine
             self.h2_affine = lambda x: x
             del self.drop
             self.drop = nn.Dropout(0)
+            if self.add_2_layer_hidden:
+                del self.h1_affine
+                self.h1_affine = lambda x: x
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
@@ -723,7 +731,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             affined = self.tgh(
                 self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
         else:
-            affined = self.tgh(self.h2_affine(self.drop(h_lang)))
+            if self.add_2_layer_hidden:
+                affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att)))
+            else:
+                affined = self.tgh(self.h2_affine(self.drop(h_lang)))
             lang_weights = torch.zeros_like(h_lang)
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
