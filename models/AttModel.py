@@ -89,7 +89,7 @@ class AttModel(CaptionModel):
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
         else:
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
                           range(opt.logit_layers - 1)]
@@ -100,6 +100,8 @@ class AttModel(CaptionModel):
         if self.tie_weights:
             if self.input_encoding_size != self.rnn_size:
                 raise ValueError('When using the tied flag, input_encoding_size must be equal to rnn_size')
+            del self.logit
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
             self.logit.weight = self.embed[0].weight
 
         # initialization
