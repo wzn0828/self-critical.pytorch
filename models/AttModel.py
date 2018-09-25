@@ -625,6 +625,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
         self.language_attention = opt.language_attention
+        self.project_hidden = opt.project_hidden
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
@@ -689,6 +690,12 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             del self.sentinal_embed1
             self.sentinal_embed1 = lambda x: x
             self.sentinel_nonlinear = lambda x: x
+
+        if not self.project_hidden:
+            del self.h2_affine
+            self.h2_affine = lambda x: x
+            del self.drop
+            self.drop = nn.Dropout(0)
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
