@@ -20,6 +20,7 @@ from __future__ import print_function
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import init
 import misc.utils as utils
 from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
 from models import model_utils
@@ -627,6 +628,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.language_attention = opt.language_attention
         self.project_hidden = opt.project_hidden
         self.add_2_layer_hidden = opt.add_2_layer_hidden
+        self.attention_gate = opt.attention_gate
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
@@ -705,6 +707,19 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 del self.h1_affine
                 self.h1_affine = lambda x: x
 
+        if self.attention_gate:
+            self.att_gate_input1 = nn.Linear(2*opt.rnn_size + opt.input_encoding_size, 2*opt.rnn_size + opt.input_encoding_size)
+            self.att_gate_h1 = nn.Linear(opt.rnn_size, 2*opt.rnn_size + opt.input_encoding_size, bias=False)
+            self.att_gate_input2 = nn.Linear(2*opt.rnn_size, 2*opt.rnn_size)
+            self.att_gate_h2 = nn.Linear(opt.rnn_size, 2*opt.rnn_size, bias=False)
+
+            init.orthogonal_(self.att_gate_input1.weight)
+            init.orthogonal_(self.att_gate_h1.weight)
+            init.orthogonal_(self.att_gate_input2.weight)
+            init.orthogonal_(self.att_gate_h2.weight)
+            init.constant_(self.att_gate_input1.bias, 1.0)
+            init.constant_(self.att_gate_input2.bias, 1.0)
+
         # initialization
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
@@ -713,6 +728,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
+        if self.attention_gate:
+            att_lstm_input = torch.mul(att_lstm_input, F.sigmoid(self.att_gate_input1(att_lstm_input) + self.att_gate_h1(state[0][0])))
+
         h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))  # both are [batch_size, rnn_size]
 
         att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
@@ -720,6 +738,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_rnn, self.training)],
                                     1)  # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        if self.attention_gate:
+            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(state[0][1])))
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
 
