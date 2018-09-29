@@ -629,6 +629,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.project_hidden = opt.project_hidden
         self.add_2_layer_hidden = opt.add_2_layer_hidden
         self.attention_gate = opt.attention_gate
+        self.directly_add_2_layer = opt.directly_add_2_layer
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
@@ -754,6 +755,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         else:
             if self.add_2_layer_hidden:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att)))
+            elif self.directly_add_2_layer:
+                affined = self.tgh(self.h2_affine(self.drop(h_lang + h_att)))
             else:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)))
             lang_weights = torch.zeros_like(h_lang)
