@@ -31,12 +31,153 @@ def add_summary_value(writer, key, value, iteration):
     if writer:
         writer.add_scalar(key, value, iteration)
 
+def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
+    # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
+    results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels, lang_weights = outputs
+    if opt.tensorboard_mid_variables:
+        # add original fc_feats histogram
+        tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
+        # add original att_feats histogram
+        tb_summary_writer.add_histogram('att_feat', data['att_feats'], iteration)
+        # add affined fc_feats histogram
+        tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
+        # # add affined att_feat histogram
+        # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+        # add att_hiddens histogram
+        tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
+        # add lan_hiddens histogram
+        tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
+        # add att_sentinel histogram
+        tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
+        # add lang_sentinel histogram
+        tb_summary_writer.add_histogram('lang_sentinel', lang_sentinels, iteration)
+    if opt.tensorboard_lang_weights:
+        # add lang_weights histogram
+        tb_summary_writer.add_histogram('lang_weights', lang_weights, iteration)
+        print('language weights when the hidden number is 6:')
+        print(lang_weights)
+
 # def flatten_params(model):
 #     return torch.cat([param.data.view(-1) for param in model.parameters()], 0)
 
 def load_params(model, avg_p_list):
     for p, avg_p in zip(model.parameters(), avg_p_list):
         p.data.copy_(avg_p)
+
+def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, loader, model, opt, tb_summary_writer):
+    original_param = deepcopy(list(p.data for p in model.parameters()))  # save current params
+    load_params(model, avg_param)  # load the average
+    # eval model on training data
+    eval_kwargs = {'split': opt.train_eval_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write train_eval result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/train_ave_model', train_eval_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
+    # eval model
+    # eval_kwargs = {'split': 'val',
+    #                'dataset': opt.input_json}
+    eval_kwargs = {'split': opt.val_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write validation result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/val_ave_model', val_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
+    # Save model if is improving on validation result
+    if opt.language_eval == 1:
+        current_score = lang_stats['CIDEr']
+    else:
+        current_score = - val_loss
+    best_flag = False
+    if best_val_score_ave_model is None or current_score >= best_val_score_ave_model:
+        best_val_score_ave_model = current_score
+        best_flag = True
+    checkpoint_path = os.path.join(opt.checkpoint_path, 'ave_model.pth')
+    torch.save(model.state_dict(), checkpoint_path)
+    print("model saved to {}".format(checkpoint_path))
+    # Dump miscalleous informations
+    infos['best_val_score_ave_model'] = best_val_score_ave_model
+    with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '.pkl'), 'wb') as f:
+        cPickle.dump(infos, f)
+    if best_flag:
+        checkpoint_path = os.path.join(opt.checkpoint_path, 'ave-best.pth')
+        torch.save(model.state_dict(), checkpoint_path)
+        print("model saved to {}".format(checkpoint_path))
+        with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '-ave_model-best.pkl'), 'wb') as f:
+            cPickle.dump(infos, f)
+    load_params(model, original_param)  # restore parameters
+
+    return best_val_score_ave_model, infos
+
+def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration, loader, loss_history, lr_history, model, opt,
+                       optimizer, ss_prob_history, tb_summary_writer, val_result_history):
+    # eval model on training data
+    eval_kwargs = {'split': opt.train_eval_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write train_eval result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/train', v, iteration)
+    # eval model
+    eval_kwargs = {'split': opt.val_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write validation result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/val', v, iteration)
+    val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
+    # Save model if is improving on validation result
+    if opt.language_eval == 1:
+        current_score = lang_stats['CIDEr']
+    else:
+        current_score = - val_loss
+    best_flag = False
+    # if True: # if true
+    if best_val_score is None or current_score >= best_val_score:
+        best_val_score = current_score
+        best_flag = True
+    checkpoint_path = os.path.join(opt.checkpoint_path, 'model.pth')
+    torch.save(model.state_dict(), checkpoint_path)
+    print("model saved to {}".format(checkpoint_path))
+    optimizer_path = os.path.join(opt.checkpoint_path, 'optimizer.pth')
+    torch.save(optimizer.state_dict(), optimizer_path)
+    # Dump miscalleous informations
+    infos['iter'] = iteration
+    infos['epoch'] = epoch
+    infos['iterators'] = loader.iterators
+    infos['split_ix'] = loader.split_ix
+    infos['best_val_score'] = best_val_score
+    infos['opt'] = opt
+    infos['vocab'] = loader.get_vocab()
+    histories['val_result_history'] = val_result_history
+    histories['loss_history'] = loss_history
+    histories['lr_history'] = lr_history
+    histories['ss_prob_history'] = ss_prob_history
+    with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '.pkl'), 'wb') as f:
+        cPickle.dump(infos, f)
+    with open(os.path.join(opt.checkpoint_path, 'histories_' + opt.id + '.pkl'), 'wb') as f:
+        cPickle.dump(histories, f)
+    if best_flag:
+        checkpoint_path = os.path.join(opt.checkpoint_path, 'model-best.pth')
+        torch.save(model.state_dict(), checkpoint_path)
+        print("model saved to {}".format(checkpoint_path))
+        with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '-best.pkl'), 'wb') as f:
+            cPickle.dump(infos, f)
+
+    return best_val_score, histories, infos
+
 
 def train(opt):
     print('Checkpoint path is ' + opt.checkpoint_path)
@@ -139,7 +280,8 @@ def train(opt):
         start = time.time()
         # Load data from train split (0)
         # data = loader.get_batch('train')
-        data = loader.get_batch('raw_train')
+        # data = loader.get_batch('raw_train')
+        data = loader.get_batch(opt.train_split)
         # print('Read data:', time.time() - start)
 
         torch.cuda.synchronize()
@@ -158,31 +300,7 @@ def train(opt):
             # add some middle variable histogram
             if iteration % (4*opt.losses_log_every) == 0:
                 outputs = [_.data.cpu().numpy() if _ is not None else None for _ in output]
-                # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
-                results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels = outputs
-                # add original fc_feats histogram
-                tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
-
-                # add original att_feats histogram
-                tb_summary_writer.add_histogram('att_feat',  data['att_feats'], iteration)
-
-                # add affined fc_feats histogram
-                tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
-
-                # # add affined att_feat histogram
-                # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
-
-                # add att_hiddens histogram
-                tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
-
-                # add lan_hiddens histogram
-                tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
-
-                # add att_sentinel histogram
-                tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
-
-                # add lang_sentinel histogram
-                tb_summary_writer.add_histogram('lang_sentinel', lang_sentinels, iteration)
+                variables_histogram(data, iteration, outputs, tb_summary_writer, opt)
 
         else:
             gen_result, sample_logprobs = dp_model(fc_feats, att_feats, att_masks, opt={'sample_max':0}, mode='sample')
@@ -228,141 +346,22 @@ def train(opt):
             lr_history[iteration] = opt.current_lr
             ss_prob_history[iteration] = model.ss_prob
 
-        if (iteration % (8*opt.losses_log_every) == 0):
+        if opt.tensorboard_weights_grads and (iteration % (8*opt.losses_log_every) == 0):
             # add weights histogram to tensorboard summary
             for name, param in model.named_parameters():
                 if param.grad is not None:
                     tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
                     tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
 
-        # make evaluation on validation set, and save model
+        # make evaluation using original model
         if (iteration % opt.save_checkpoint_every == 0):
-
-            # eval model on training data
-            eval_kwargs = {'split': 'train_eval',
-                           'dataset': opt.input_json}
-            eval_kwargs.update(vars(opt))
-            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-
-            # Write train_eval result into summary
-            add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
-            if lang_stats is not None:
-                for k, v in lang_stats.items():
-                    add_summary_value(tb_summary_writer, k+'/train', v, iteration)
-
-            # eval model
-            eval_kwargs = {'split': 'online_val',
-                           'dataset': opt.input_json}
-            eval_kwargs.update(vars(opt))
-            val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-
-            # Write validation result into summary
-            add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
-            if lang_stats is not None:
-                for k,v in lang_stats.items():
-                    add_summary_value(tb_summary_writer, k+'/val', v, iteration)
-            val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
-
-            # Save model if is improving on validation result
-            if opt.language_eval == 1:
-                current_score = lang_stats['CIDEr']
-            else:
-                current_score = - val_loss
-
-            best_flag = False
-            if True: # if true
-                if best_val_score is None or current_score >= best_val_score:
-                    best_val_score = current_score
-                    best_flag = True
-                checkpoint_path = os.path.join(opt.checkpoint_path, 'model.pth')
-                torch.save(model.state_dict(), checkpoint_path)
-                print("model saved to {}".format(checkpoint_path))
-                optimizer_path = os.path.join(opt.checkpoint_path, 'optimizer.pth')
-                torch.save(optimizer.state_dict(), optimizer_path)
-
-                # Dump miscalleous informations
-                infos['iter'] = iteration
-                infos['epoch'] = epoch
-                infos['iterators'] = loader.iterators
-                infos['split_ix'] = loader.split_ix
-                infos['best_val_score'] = best_val_score
-                infos['opt'] = opt
-                infos['vocab'] = loader.get_vocab()
-
-                histories['val_result_history'] = val_result_history
-                histories['loss_history'] = loss_history
-                histories['lr_history'] = lr_history
-                histories['ss_prob_history'] = ss_prob_history
-                with open(os.path.join(opt.checkpoint_path, 'infos_'+opt.id+'.pkl'), 'wb') as f:
-                    cPickle.dump(infos, f)
-                with open(os.path.join(opt.checkpoint_path, 'histories_'+opt.id+'.pkl'), 'wb') as f:
-                    cPickle.dump(histories, f)
-
-                if best_flag:
-                    checkpoint_path = os.path.join(opt.checkpoint_path, 'model-best.pth')
-                    torch.save(model.state_dict(), checkpoint_path)
-                    print("model saved to {}".format(checkpoint_path))
-                    with open(os.path.join(opt.checkpoint_path, 'infos_'+opt.id+'-best.pkl'), 'wb') as f:
-                        cPickle.dump(infos, f)
+            best_val_score, histories, infos = eva_original_model(best_val_score, crit, epoch, histories, infos, iteration, loader, loss_history, lr_history,
+                               model, opt, optimizer, ss_prob_history, tb_summary_writer, val_result_history)
 
         # make evaluation with the averaged parameters model
         if iteration > opt.ave_threshold and (iteration % opt.save_checkpoint_every == 0):
-            original_param = deepcopy(list(p.data for p in model.parameters()))  # save current params
-            load_params(model, avg_param)  # load the average
-
-            # eval model on training data
-            eval_kwargs = {'split': 'train_eval',
-                           'dataset': opt.input_json}
-            eval_kwargs.update(vars(opt))
-            train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-
-            # Write train_eval result into summary
-            add_summary_value(tb_summary_writer, 'validation_loss/train_ave_model', train_eval_loss, iteration)
-            if lang_stats is not None:
-                for k, v in lang_stats.items():
-                    add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
-
-            # eval model
-            # eval_kwargs = {'split': 'val',
-            #                'dataset': opt.input_json}
-            eval_kwargs = {'split': 'online_val',
-                           'dataset': opt.input_json}
-            eval_kwargs.update(vars(opt))
-            val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-
-            # Write validation result into summary
-            add_summary_value(tb_summary_writer, 'validation_loss/val_ave_model', val_loss, iteration)
-            if lang_stats is not None:
-                for k, v in lang_stats.items():
-                    add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
-
-            # Save model if is improving on validation result
-            if opt.language_eval == 1:
-                current_score = lang_stats['CIDEr']
-            else:
-                current_score = - val_loss
-
-            best_flag = False
-            if best_val_score_ave_model is None or current_score >= best_val_score_ave_model:
-                best_val_score_ave_model = current_score
-                best_flag = True
-            checkpoint_path = os.path.join(opt.checkpoint_path, 'ave_model.pth')
-            torch.save(model.state_dict(), checkpoint_path)
-            print("model saved to {}".format(checkpoint_path))
-
-            # Dump miscalleous informations
-            infos['best_val_score_ave_model'] = best_val_score_ave_model
-            with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '.pkl'), 'wb') as f:
-                cPickle.dump(infos, f)
-
-            if best_flag:
-                checkpoint_path = os.path.join(opt.checkpoint_path, 'ave-best.pth')
-                torch.save(model.state_dict(), checkpoint_path)
-                print("model saved to {}".format(checkpoint_path))
-                with open(os.path.join(opt.checkpoint_path, 'infos_' + opt.id + '-ave_model-best.pkl'), 'wb') as f:
-                    cPickle.dump(infos, f)
-
-            load_params(model, original_param)  # restore parameters
+            best_val_score_ave_model, infos = eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, loader, model, opt,
+                          tb_summary_writer)
 
         # # Stop if reaching max epochs
         # if epoch >= opt.max_epochs and opt.max_epochs != -1:

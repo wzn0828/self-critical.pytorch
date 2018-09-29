@@ -42,6 +42,8 @@ def parse_opt():
                     help='2048 for resnet, 512 for vgg')
     parser.add_argument('--logit_layers', type=int, default=1,
                     help='number of layers in the RNN')
+    parser.add_argument('--tie_weights', type=bool, default=False,
+                    help='whether tie the weights of logit layer and embedding layer')
 
 
     parser.add_argument('--use_bn', type=int, default=0,
@@ -100,7 +102,6 @@ def parse_opt():
                     help='epsilon that goes into denominator for smoothing')
     parser.add_argument('--weight_decay', type=float, default=0,
                     help='weight_decay')
-
     parser.add_argument('--scheduled_sampling_start', type=int, default=-1, 
                     help='at what iteration to start decay gt probability')
     parser.add_argument('--scheduled_sampling_increase_every', type=int, default=5, 
@@ -109,6 +110,12 @@ def parse_opt():
                     help='How much to update the prob')
     parser.add_argument('--scheduled_sampling_max_prob', type=float, default=0.25, 
                     help='Maximum scheduled sampling prob.')
+    parser.add_argument('--train_split', type=str, default='train',
+                        help='which split to use when training, train or raw_train')
+    parser.add_argument('--train_eval_split', type=str, default='train_eval',
+                        help='which split to use when training, train or raw_train')
+    parser.add_argument('--val_split', type=str, default='val',
+                        help='which split to use when training, train or raw_train')
 
 
     # Evaluation/Checkpointing
@@ -126,7 +133,7 @@ def parse_opt():
                     help='Do we load previous best score when resuming training.')
     parser.add_argument('--load_best', type=int, default=0,
                     help='Do we load previous best model? (0 = disable)')
-    parser.add_argument('--train_eval_images_use', type=int, default=480,
+    parser.add_argument('--train_eval_images_use', type=int, default=1000,
                     help='how many images to use when periodically evaluating the train performance?')
 
 
@@ -137,6 +144,15 @@ def parse_opt():
                     help='if true then use 80k, else use 110k')
     parser.add_argument('--beta', type=float, default=0.998,
                         help='the beta in ExponentialMovingAverage')
+    parser.add_argument('--tensorboard_weights_grads', type=bool, default=False,
+                        help='tensorboard the weights and grads')
+    parser.add_argument('--tensorboard_mid_variables', type=bool, default=False,
+                        help='whether tensorboard mid variables histogram')
+    parser.add_argument('--tensorboard_lang_weights', type=bool, default=False,
+                        help='whether tensorboard language attention weights histogram')
+    parser.add_argument('--language_attention', type=bool, default=False,
+                        help='whether use language attention module')
+
 
 
     # Reward

@@ -42,7 +42,8 @@ parser.add_argument('--dump_json', type=int, default=1,
                 help='Dump json with predictions into vis folder? (1=yes,0=no)')
 parser.add_argument('--dump_path', type=int, default=0,
                 help='Write image paths along with predictions into vis json? (1=yes,0=no)')
-
+parser.add_argument('--ciderd', type=bool, default=False,
+                help='whether produce cider score for each generated caption. If TURE, the split must in the MS COCO validation dataset')
 # Sampling options
 parser.add_argument('--sample_max', type=int, default=1,
                 help='1 = sample argmax words. 0 = sample from distributions.')
@@ -167,7 +168,7 @@ loader.ix_to_word = infos['vocab']
 
 
 # Set sample options
-loss, split_predictions, lang_stats = eval_utils.eval_split(model, crit, loader, 
+loss, split_predictions, lang_stats = eval_utils.eval_split(model, crit, loader,
     vars(opt))
 
 print('loss: ', loss)
@@ -176,7 +177,6 @@ if lang_stats:
 
 if opt.dump_json == 1:
     # dump the json
-    cache_path = os.path.join('vis/', opt.id)
     if not os.path.exists(cache_path):
         os.mkdir(cache_path)
     if opt.split == None:

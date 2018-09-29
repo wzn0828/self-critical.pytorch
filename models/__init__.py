@@ -44,144 +44,27 @@ def setup(opt):
     # DenseAtt
     elif opt.caption_model == 'denseatt':
         model = DenseAttModel(opt)
-    # Top-down-sentinal attention model s
-    elif opt.caption_model == 'topdown_sentinal':
-        model = TopDownSentinalModel(opt)
-    elif opt.caption_model == 'topdown_sentinal_affine':
-        model = TopDownSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_sentinal_affine2':
-        model = TopDownSentinalAffine2Model(opt)
-
-    # Top-down-cat-sentinal model s
-    elif opt.caption_model == 'topdown_cat_sentinal':
-        model = TopDownCatSentinalModel(opt)
-    elif opt.caption_model == 'topdown_cat_sentinal_affine':
-        model = TopDownCatSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_cat_sentinal_affine2':
-        model = TopDownCatSentinalAffine2Model(opt)
-
-    # Top-down-recurrent-sentinal model s
-    elif opt.caption_model == 'topdown_recurrent_sentinal':
-        model = TopDownRecurrentSentinalModel(opt)
-    elif opt.caption_model == 'topdown_recurrent_sentinal_affine':
-        model = TopDownRecurrentSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_recurrent_sentinal_affine2':
-        model = TopDownRecurrentSentinalAffine2Model(opt)
-
-    # top-down-average-sentinal model
-    elif opt.caption_model == 'topdown_average_sentinal':
-        model = TopDownAverageSentinalModel(opt)
-
-    # top-down-weighted-sentinal model
-    elif opt.caption_model == 'topdown_weighted_sentinal':
-        model = TopDownWeightedSentinalModel(opt)
-
-    elif opt.caption_model == 'topdown_weighted_sentinal_tanh_att':
-        model = TopDownWeightedSentinalModel_tanh_att(opt)
-
-    # top-down-weighted2-sentinal model
-    elif opt.caption_model == 'topdown_weighted2_sentinal':
-        model = TopDownWeighted2SentinalModel(opt)
-
-    # Top-down-cat-recurrent-sentinal model s
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal':
-        model = TopDownCatRecurrentSentinalModel(opt)
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine':
-        model = TopDownCatRecurrentSentinalAffineModel(opt)
-    elif opt.caption_model == 'topdown_cat_recurrent_sentinal_affine2':
-        model = TopDownCatRecurrentSentinalAffine2Model(opt)
-
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
-
-    elif opt.caption_model == 'topdown_original_weighted_sentinel':
-        model = TopDownOriginalWeightedSentinelModel(opt)
-
-    # top-down-cat-weighted-sentinal model
-    elif opt.caption_model == 'topdown_cat_weighted_sentinal':
-        model = TopDownCatWeightedSentinalModel(opt)
-
-
-    # topdown_cat_weighted_sentinal_base_attfeat
-    elif opt.caption_model == 'topdown_cat_weighted_sentinal_base_attfeat':
-        model = TopDownCatWeightedSentinalBaseAttModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_cat_weighted_sentinal':
-        model = TopDownUpCatWeightedSentinalModel(opt)
-
-
-    # topdown_up_add_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_add_weighted_sentinal':
-        model = TopDownUpAddWeightedSentinalModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_cat_weighted_sentinal_base_attfeat':
-        model = TopDownUpCatWeightedSentinalBaseAttModel(opt)
-
-
-    # topdown_up_cat_weighted_sentinal
-    elif opt.caption_model == 'topdown_up_add_weighted_sentinal_base_attfeat':
-        model = TopDownUpAddWeightedSentinalBaseAttModel(opt)
-
-
-    # base the original paper model, add a affine to att_feature
-    elif opt.caption_model == 'topdown_original_2':
-        model = TopDownOriginal2Model(opt)
-
-    elif opt.caption_model == 'topdown_recurrent_hidden':
-        model = TopDownRecurrentHiddenModel(opt)
-
-
-    # top-down-weighted-hidden model
-    elif opt.caption_model == 'topdown_weighted_hidden':
-        model = TopDownWeightedHiddenModel(opt)
-
-    # top-down-cat-weighted-hidden model
-    elif opt.caption_model == 'topdown_cat_weighted_hidden':
-        model = TopDownCatWeightedHiddenModel(opt)
-
-    # topdown_up_cat_weighted_hidden
-    elif opt.caption_model == 'topdown_up_cat_weighted_hidden':
-        model = TopDownUpCatWeightedHiddenModel(opt)
-
-
-    # topdown_up_cat_weighted_hidden
-    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_1':
-        model = TopDownUpCatWeightedHiddenModel_1(opt)
-    # topdown_up_cat_weighted_hidden
-    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_2':
-        model = TopDownUpCatWeightedHiddenModel_2(opt)
+    # Top-down-sentinal attention model s
+    elif opt.caption_model == 'topdown_sentinal_affine2':
+        model = TopDownSentinalAffine2Model(opt)
     # topdown_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_up_cat_weighted_hidden_3':
         model = TopDownUpCatWeightedHiddenModel_3(opt)
-    # topdown_up_cat_weighted_hidden
-    elif opt.caption_model == 'topdown_up_cat_weighted_hidden_4':
-        model = TopDownUpCatWeightedHiddenModel_4(opt)
-
-
     # topdown_up_cat_average_hidden
     elif opt.caption_model == 'topdown_up_cat_average_hidden':
         model = TopDownUpCatAverageHiddenModel(opt)
-
-
-
     # topdown_2layer_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_2layer_up_cat_weighted_hidden':
         model = TopDown2LayerUpCatWeightedHiddenModel(opt)
-
-
     # topdown_attlayer_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_attlayer_up_cat_weighted_hidden':
         model = TopDownAttLayerUpCatWeightedHiddenModel(opt)
-
     # bottomup
     elif opt.caption_model == 'bottomup':
         model = BottomUpModel(opt)
-
 
     else:
         raise Exception("Caption model not supported: {}".format(opt.caption_model))
