@@ -64,6 +64,7 @@ class AttModel(CaptionModel):
         self.att_feat_size = opt.att_feat_size
         self.att_hid_size = opt.att_hid_size
         self.tie_weights = opt.tie_weights
+        self.LSTMN = opt.LSTMN
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -113,10 +114,13 @@ class AttModel(CaptionModel):
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
-        return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
-                weight.new_zeros(self.num_layers, bsz, self.rnn_size),
-                weight.new_zeros(self.num_layers, bsz, self.rnn_size))  # (h0, c0, sentinal)
-        # weight.new_zeros(bsz, 1, self.rnn_size))       # (h0, c0, sentinal)
+        if self.LSTMN:
+            return (weight.new_zeros(2*self.num_layers, bsz, self.rnn_size),)   # h01,c01,h02,c02
+        else:
+            return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
+                    weight.new_zeros(self.num_layers, bsz, self.rnn_size),
+                    weight.new_zeros(self.num_layers, bsz, self.rnn_size))  # (h0, c0, sentinal)
+            # weight.new_zeros(bsz, 1, self.rnn_size))       # (h0, c0, sentinal)
 
     def clip_att(self, att_feats, att_masks):
         # Clip the length of att_masks and att_feats to the maximum length
@@ -625,14 +629,21 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.drop_prob_rnn = opt.drop_prob_rnn
         self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
+        self.input_encoding_size = opt.input_encoding_size
         self.language_attention = opt.language_attention
         self.project_hidden = opt.project_hidden
         self.add_2_layer_hidden = opt.add_2_layer_hidden
         self.attention_gate = opt.attention_gate
         self.directly_add_2_layer = opt.directly_add_2_layer
+        self.LSTMN = opt.LSTMN
 
         self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
         self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
+
+        if self.LSTMN:
+            self.intra_att_att_lstm = IntraAttention(opt, 2*self.rnn_size + self.input_encoding_size)
+            self.intra_att_lang_lstm = IntraAttention(opt, 2*self.rnn_size)
+
         self.attention = Attention(opt)
         if opt.weighted_hidden:
             self.sen_attention = SentinalAttention(opt)
@@ -726,13 +737,37 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         model_utils.lstm_init(self.lang_lstm)
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
-        prev_h = F.dropout(state[0][-1], self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
+        pre_states = state[1:]
+        step = len(pre_states)
+
+        if self.LSTMN:
+            h2 = state[-1][2]
+        else:
+            h2 = state[0][1]
+            c2 = state[1][1]
+
+        prev_h = F.dropout(h2, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
-        if self.attention_gate:
-            att_lstm_input = torch.mul(att_lstm_input, F.sigmoid(self.att_gate_input1(att_lstm_input) + self.att_gate_h1(state[0][0])))
+        if self.LSTMN:
+            if step < 2:
+                h1 = state[-1][0]
+                c1 = state[-1][1]
+                layer1_weights = h1.new_ones((h1.size(0), 1))
+            else:
+                last_att_h1 = state[0][0]
+                hi = torch.cat([_[0].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                ci = torch.cat([_[1].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                h1, c1, layer1_weights = self.intra_att_att_lstm(att_lstm_input, last_att_h1, hi, ci)   # batch * rnn_size, batch * num_hidden
+        else:
+            h1 = state[0][0]
+            c1 = state[1][0]
 
-        h_att, c_att = self.att_lstm(att_lstm_input, (state[0][0], state[1][0]))  # both are [batch_size, rnn_size]
+        if self.attention_gate:
+            att_lstm_input = torch.mul(att_lstm_input, F.sigmoid(
+                self.att_gate_input1(att_lstm_input) + self.att_gate_h1(h1)))
+
+        h_att, c_att = self.att_lstm(att_lstm_input, (h1, c1))  # both are [batch_size, rnn_size]
 
         att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
@@ -740,10 +775,21 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                                     1)  # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
+        if self.LSTMN:
+            if step < 2:
+                h2 = state[-1][2]
+                c2 = state[-1][3]
+                layer2_weights = h2.new_ones((h2.size(0), 1))
+            else:
+                last_att_h2 = state[0][1]
+                hi = torch.cat([_[2].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                ci = torch.cat([_[3].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                h2, c2, layer2_weights = self.intra_att_lang_lstm(lang_lstm_input, last_att_h2, hi,
+                                                                 ci)  # batch * rnn_size, batch * num_hidden
         if self.attention_gate:
-            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(state[0][1])))
+            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(h2)))
 
-        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (state[0][1], state[1][1]))  # batch*rnn_size
+        h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h2, c2))  # batch*rnn_size
 
         if self.language_attention:
             pre_sentinal = state[2:]
@@ -759,21 +805,25 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined = self.tgh(self.h2_affine(self.drop(h_lang + h_att)))
             else:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)))
-            lang_weights = torch.zeros_like(h_lang)
+            lang_weights = (layer1_weights + layer2_weights)/2.0
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
 
-        if self.transfer_horizontal:
-            state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
-        else:
-            state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+        # --start-------generate state--------#
 
-        # --start-------generate recurrent--------#
+        if self.LSTMN:
+            state = (torch.stack([h1, h2, h1, h2]),) + tuple(pre_states) + (torch.stack([h_att, c_att, h_lang, c_lang]),)
+        else:
+            if self.transfer_horizontal:
+                state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
+            else:
+                state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
+
         if self.language_attention:
             sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
             sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
             state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
-        # --end-------generate recurrent--------#
+        # --end-------generate state--------#
 
         return output, state, lang_weights
 
@@ -1273,6 +1323,62 @@ class SentinalAttention(nn.Module):
         sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
         return torch.bmm(h, sentinal).squeeze(1)/22.6      # batch * num_hidden
+
+
+
+class IntraAttention(nn.Module):
+    def __init__(self, opt, xt_dimension):
+        super(IntraAttention, self).__init__()
+        self.rnn_size = opt.rnn_size
+        self.att_hid_size = opt.att_hid_size
+        self.xt_dimension = xt_dimension
+
+        self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
+        self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+        self.hi2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
+        # initialization
+        model_utils.xavier_uniform('tanh', self.xt2att, self.hl2att, self.hi2att)
+        model_utils.kaiming_normal('relu', 0, self.alpha_net)
+
+
+    def forward(self, xt, last_att_hl, hi, ci):
+        # xt, batch * input_encoding_size
+        # last_att_hl, batch * rnn_size
+        # hi, batch * num_hidden * rnn_size
+        # ci, batch * num_hidden * rnn_size
+
+        # relevance score
+        att_score = self.mlp_att_score(xt, last_att_hl, hi)
+
+        # softmax
+        weights = F.softmax(att_score, dim=1)  # batch * num_hidden
+        weights = weights.unsqueeze(1)  # batch * 1 * num_hidden
+
+        # weighted summation
+        att_hi = torch.bmm(weights, hi).squeeze(1)  # batch * rnn_size
+        att_ci = torch.bmm(weights, ci).squeeze(1)  # batch * rnn_size
+        # --end----recurrent attention-----#
+
+        return att_hi, att_ci, weights.squeeze(1)  # batch * rnn_size, batch * num_hidden
+
+    def mlp_att_score(self, xt, last_att_hl, hi):
+        # hi's shape is batch * num_hidden * rnn_size
+        num_hidden = hi.size(1)
+
+        att_xt = self.xt2att(xt)  # batch * att_hid_size
+        att_hl = self.hl2att(last_att_hl)   # batch * att_hid_size
+        att_hi = self.hi2att(hi)  # batch * num_hidden * att_hid_size
+        att_xt = att_xt.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
+        att_hl = att_hl.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
+
+        att_score = att_xt + att_hl + att_hi  # batch * num_hidden * att_hid_size
+        att_score = F.tanh(att_score)  # batch * num_hidden * att_hid_size
+        att_score = att_score.view(-1, self.att_hid_size)  # (batch*num_hidden) * att_hid_size
+        att_score = self.alpha_net(att_score)  # (batch*num_hidden) * 1
+        att_score = att_score.view(-1, num_hidden)  # batch * num_hidden
+
+        return att_score
 
 
 class O_SentinalAttention(SentinalAttention):
