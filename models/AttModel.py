@@ -1337,6 +1337,7 @@ class IntraAttention(nn.Module):
         self.xt_dimension = xt_dimension
         self.LSTMN_last_att_hidden = opt.LSTMN_last_att_hidden
         self.LSTM_att_hi = opt.LSTM_att_hi
+        self.LSTMN_att_key_hi_ci = opt.LSTMN_att_key_hi_ci
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1357,7 +1358,11 @@ class IntraAttention(nn.Module):
         # ci, batch * num_hidden * rnn_size
 
         # relevance score
-        att_score = self.mlp_att_score(xt, last_att_hl, hi)
+        if self.LSTMN_att_key_hi_ci == 0:
+            key = hi
+        else:
+            key = ci
+        att_score = self.mlp_att_score(xt, last_att_hl, key)
 
         # softmax
         weights = F.softmax(att_score, dim=1)  # batch * num_hidden
