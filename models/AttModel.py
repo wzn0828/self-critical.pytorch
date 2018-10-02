@@ -805,7 +805,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined = self.tgh(self.h2_affine(self.drop(h_lang + h_att)))
             else:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)))
-            lang_weights = (layer1_weights + layer2_weights)/2.0
+            if self.LSTMN:
+                lang_weights = (layer1_weights + layer2_weights)/2.0
+            else:
+                lang_weights = torch.zeros_like(h2)
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
 
@@ -1332,6 +1335,8 @@ class IntraAttention(nn.Module):
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
         self.xt_dimension = xt_dimension
+        self.LSTMN_last_att_hidden = opt.LSTMN_last_att_hidden
+        self.LSTM_att_hi = opt.LSTM_att_hi
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1340,6 +1345,9 @@ class IntraAttention(nn.Module):
         # initialization
         model_utils.xavier_uniform('tanh', self.xt2att, self.hl2att, self.hi2att)
         model_utils.kaiming_normal('relu', 0, self.alpha_net)
+
+        if not self.LSTMN_last_att_hidden:
+            del self.hl2att
 
 
     def forward(self, xt, last_att_hl, hi, ci):
@@ -1355,8 +1363,12 @@ class IntraAttention(nn.Module):
         weights = F.softmax(att_score, dim=1)  # batch * num_hidden
         weights = weights.unsqueeze(1)  # batch * 1 * num_hidden
 
-        # weighted summation
-        att_hi = torch.bmm(weights, hi).squeeze(1)  # batch * rnn_size
+        if self.LSTM_att_hi:
+            # weighted summation
+            att_hi = torch.bmm(weights, hi).squeeze(1)  # batch * rnn_size
+        else:
+            att_hi = hi[:, -1, :]
+
         att_ci = torch.bmm(weights, ci).squeeze(1)  # batch * rnn_size
         # --end----recurrent attention-----#
 
@@ -1367,12 +1379,16 @@ class IntraAttention(nn.Module):
         num_hidden = hi.size(1)
 
         att_xt = self.xt2att(xt)  # batch * att_hid_size
-        att_hl = self.hl2att(last_att_hl)   # batch * att_hid_size
         att_hi = self.hi2att(hi)  # batch * num_hidden * att_hid_size
         att_xt = att_xt.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
-        att_hl = att_hl.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
 
-        att_score = att_xt + att_hl + att_hi  # batch * num_hidden * att_hid_size
+        if self.LSTMN_last_att_hidden:
+            att_hl = self.hl2att(last_att_hl)  # batch * att_hid_size
+            att_hl = att_hl.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
+            att_score = att_xt + att_hl + att_hi  # batch * num_hidden * att_hid_size
+        else:
+            att_score = att_xt + att_hi  # batch * num_hidden * att_hid_size
+
         att_score = F.tanh(att_score)  # batch * num_hidden * att_hid_size
         att_score = att_score.view(-1, self.att_hid_size)  # (batch*num_hidden) * att_hid_size
         att_score = self.alpha_net(att_score)  # (batch*num_hidden) * 1
