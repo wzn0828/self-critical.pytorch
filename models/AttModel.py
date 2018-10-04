@@ -1361,6 +1361,8 @@ class IntraAttention(nn.Module):
         self.LSTMN_last_att_hidden = opt.LSTMN_last_att_hidden
         self.LSTM_att_hi = opt.LSTM_att_hi
         self.LSTMN_att_key_hi_ci = opt.LSTMN_att_key_hi_ci
+        self.distance_sensitive_bias = opt.distance_sensitive_bias
+        self.distance_bias_9_1 = opt.distance_bias_9_1
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1373,19 +1375,36 @@ class IntraAttention(nn.Module):
         if not self.LSTMN_last_att_hidden:
             del self.hl2att
 
+        if self.distance_sensitive_bias:
+            if self.distance_bias_9_1:
+                self.bias_1_9 = nn.Parameter(self.alpha_net.weight.data.new_zeros((1, 9)))
+                self.bias_10_ = nn.Parameter(self.alpha_net.weight.data.new_zeros((1, 1)))
+            else:
+                self.bias = nn.Parameter(self.alpha_net.weight.data.new_zeros((1, 16)))
+
 
     def forward(self, xt, last_att_hl, hi, ci):
         # xt, batch * input_encoding_size
         # last_att_hl, batch * rnn_size
         # hi, batch * num_hidden * rnn_size
         # ci, batch * num_hidden * rnn_size
+        num_hidden = ci.size(1)
 
         # relevance score
         if self.LSTMN_att_key_hi_ci == 0:
             key = hi
         else:
             key = ci
-        att_score = self.mlp_att_score(xt, last_att_hl, key)
+        att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
+
+        # add distance-sensitive bias
+        if self.distance_sensitive_bias:
+            if self.distance_bias_9_1:
+                if num_hidden < 10:
+                    self.bias = self.bias_1_9.data
+                else:
+                    self.bias = torch.cat((self.bias_10_.expand(-1, 7), self.bias_1_9), 1)
+            att_score = att_score + self.bias[:, -num_hidden:].expand_as(att_score)
 
         # softmax
         weights = F.softmax(att_score, dim=1)  # batch * num_hidden

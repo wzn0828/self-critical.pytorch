@@ -352,6 +352,11 @@ def train(opt):
                 if param.grad is not None:
                     tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
                     tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
+            if opt.distance_sensitive_bias:
+                print('The bias in intra_att_att_lstm is as follows:')
+                print(model.core.intra_att_att_lstm.bias.data.cpu().tolist())
+                print('The bias in intra_att_lang_lstm is as follows:')
+                print(model.core.intra_att_lang_lstm.bias.data.cpu().tolist())
 
         # make evaluation using original model
         if (iteration % opt.save_checkpoint_every == 0):
