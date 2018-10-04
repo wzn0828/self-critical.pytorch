@@ -774,9 +774,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 if self.input_first_att == 1:
                     input_first_att = xt
                 elif self.input_first_att == 2:
-                    input_first_att = torch.cat([prev_h, xt], 1)
+                    input_first_att = torch.cat([h2, xt], 1)
                 elif self.input_first_att == 3:
-                    input_first_att = torch.cat([prev_h, fc_feats, xt], 1)
+                    input_first_att = torch.cat([h2, fc_feats, xt], 1)
                 h1, c1, layer1_weights = self.intra_att_att_lstm(input_first_att, last_att_h1, hi, ci)   # batch * rnn_size, batch * num_hidden
         else:
             h1 = state[0][0]
@@ -804,9 +804,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 hi = torch.cat([_[2].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
                 ci = torch.cat([_[3].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
                 if self.input_second_att == 1:
-                    input_second_att = droped_h_att
+                    input_second_att = h_att
                 elif self.input_second_att == 2:
-                    input_second_att = torch.cat([att, droped_h_att], 1)
+                    input_second_att = torch.cat([att, h_att], 1)
                 h2, c2, layer2_weights = self.intra_att_lang_lstm(input_second_att, last_att_h2, hi,
                                                                  ci)  # batch * rnn_size, batch * num_hidden
         if self.attention_gate:
