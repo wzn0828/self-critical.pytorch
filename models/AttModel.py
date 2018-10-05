@@ -1364,6 +1364,8 @@ class IntraAttention(nn.Module):
         self.distance_sensitive_bias = opt.distance_sensitive_bias
         self.distance_bias_9_1 = opt.distance_bias_9_1
         self.distance_sensitive_coefficient = opt.distance_sensitive_coefficient
+        self.word_sensitive_bias = opt.word_sensitive_bias
+        self.word_sensitive_coefficient = opt.word_sensitive_coefficient
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1375,6 +1377,18 @@ class IntraAttention(nn.Module):
 
         if not self.LSTMN_last_att_hidden:
             del self.hl2att
+
+        if self.word_sensitive_bias:
+            self.word_bias_projection = nn.Sequential(nn.Linear(self.rnn_size, self.rnn_size, bias=False), nn.Tanh(),
+                                                      nn.Linear(self.rnn_size, 1, bias=False))
+            model_utils.xavier_uniform('tanh', self.word_bias_projection[0], self.word_bias_projection[2])
+
+        if self.word_sensitive_coefficient:
+            self.word_coefficient_projection = nn.Sequential(nn.Linear(self.rnn_size, self.rnn_size, bias=False),
+                                                             nn.Tanh(),
+                                                             nn.Linear(self.rnn_size, 1, bias=False))
+            model_utils.xavier_uniform('tanh', self.word_coefficient_projection[0], self.word_coefficient_projection[2])
+
 
         if self.distance_sensitive_bias:
             if self.distance_bias_9_1:
@@ -1400,9 +1414,17 @@ class IntraAttention(nn.Module):
             key = ci
         att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
 
+        # add word-sensitive coefficient
+        if self.word_sensitive_coefficient:
+            att_score = att_score * self.word_coefficient_projection(key).squeeze(2)
+
         # add distance-sensitive coefficient
         if self.distance_sensitive_coefficient:
             att_score = att_score * self.coefficient[:, -num_hidden:].expand_as(att_score)
+
+        # add word-sensitive bias
+        if self.word_sensitive_bias:
+            att_score = att_score + self.word_bias_projection(key).squeeze(2)
 
         # add distance-sensitive bias
         if self.distance_sensitive_bias:
