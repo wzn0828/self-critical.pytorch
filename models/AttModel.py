@@ -115,7 +115,7 @@ class AttModel(CaptionModel):
     def init_hidden(self, bsz):
         weight = next(self.parameters())
         if self.LSTMN:
-            return (weight.new_zeros(2*self.num_layers, bsz, self.rnn_size),)   # h01,c01,h02,c02
+            return (weight.new_zeros(2*self.num_layers+1, bsz, self.rnn_size),)   # h01,c01,h02,c02,xt
         else:
             return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
                     weight.new_zeros(self.num_layers, bsz, self.rnn_size),
@@ -838,7 +838,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --start-------generate state--------#
 
         if self.LSTMN:
-            state = (torch.stack([h1, h2, h1, h2]),) + tuple(pre_states) + (torch.stack([h_att, c_att, h_lang, c_lang]),)
+            state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (torch.stack([h_att, c_att, h_lang, c_lang, xt]),)
         else:
             if self.transfer_horizontal:
                 state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
