@@ -1363,6 +1363,7 @@ class IntraAttention(nn.Module):
         self.LSTMN_att_key_hi_ci = opt.LSTMN_att_key_hi_ci
         self.distance_sensitive_bias = opt.distance_sensitive_bias
         self.distance_bias_9_1 = opt.distance_bias_9_1
+        self.distance_sensitive_coefficient = opt.distance_sensitive_coefficient
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1382,6 +1383,8 @@ class IntraAttention(nn.Module):
             else:
                 self.bias = nn.Parameter(self.alpha_net.weight.data.new_zeros((1, 16)))
 
+        if self.distance_sensitive_coefficient:
+            self.coefficient = nn.Parameter(self.alpha_net.weight.data.new_ones((1, 16)))
 
     def forward(self, xt, last_att_hl, hi, ci):
         # xt, batch * input_encoding_size
@@ -1396,6 +1399,10 @@ class IntraAttention(nn.Module):
         else:
             key = ci
         att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
+
+        # add distance-sensitive coefficient
+        if self.distance_sensitive_coefficient:
+            att_score = att_score * self.coefficient[:, -num_hidden:].expand_as(att_score)
 
         # add distance-sensitive bias
         if self.distance_sensitive_bias:
