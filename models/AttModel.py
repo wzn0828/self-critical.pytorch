@@ -752,6 +752,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
+        if step > 1:
+            xi = torch.cat([_[4].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
 
         if self.LSTMN:
             h2 = state[-1][2]
@@ -777,7 +779,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                     input_first_att = torch.cat([h2, xt], 1)
                 elif self.input_first_att == 3:
                     input_first_att = torch.cat([h2, fc_feats, xt], 1)
-                h1, c1, layer1_weights = self.intra_att_att_lstm(input_first_att, last_att_h1, hi, ci)   # batch * rnn_size, batch * num_hidden
+                h1, c1, layer1_weights = self.intra_att_att_lstm(input_first_att, last_att_h1, hi, ci, xi)   # batch * rnn_size, batch * num_hidden
         else:
             h1 = state[0][0]
             c1 = state[1][0]
@@ -808,7 +810,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 elif self.input_second_att == 2:
                     input_second_att = torch.cat([att, h_att], 1)
                 h2, c2, layer2_weights = self.intra_att_lang_lstm(input_second_att, last_att_h2, hi,
-                                                                 ci)  # batch * rnn_size, batch * num_hidden
+                                                                 ci, xi)  # batch * rnn_size, batch * num_hidden
         if self.attention_gate:
             lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(h2)))
 
@@ -1366,6 +1368,7 @@ class IntraAttention(nn.Module):
         self.distance_sensitive_coefficient = opt.distance_sensitive_coefficient
         self.word_sensitive_bias = opt.word_sensitive_bias
         self.word_sensitive_coefficient = opt.word_sensitive_coefficient
+        self.word_sensitive_hi_xi = opt.word_sensitive_hi_xi
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1400,11 +1403,13 @@ class IntraAttention(nn.Module):
         if self.distance_sensitive_coefficient:
             self.coefficient = nn.Parameter(self.alpha_net.weight.data.new_ones((1, 16)))
 
-    def forward(self, xt, last_att_hl, hi, ci):
+    def forward(self, xt, last_att_hl, hi, ci, xi):
         # xt, batch * input_encoding_size
         # last_att_hl, batch * rnn_size
         # hi, batch * num_hidden * rnn_size
         # ci, batch * num_hidden * rnn_size
+        # xi, batch * num_hidden * input_encoding_size
+
         num_hidden = ci.size(1)
 
         # relevance score
@@ -1413,6 +1418,11 @@ class IntraAttention(nn.Module):
         else:
             key = ci
         att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
+
+        if self.word_sensitive_hi_xi == 1:
+            key = xi
+        else:
+            key = hi
 
         # add word-sensitive coefficient
         if self.word_sensitive_coefficient:
