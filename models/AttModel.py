@@ -1369,6 +1369,7 @@ class IntraAttention(nn.Module):
         self.word_sensitive_bias = opt.word_sensitive_bias
         self.word_sensitive_coefficient = opt.word_sensitive_coefficient
         self.word_sensitive_hi_xi = opt.word_sensitive_hi_xi
+        self.not_use_first = opt.not_use_first
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1409,6 +1410,11 @@ class IntraAttention(nn.Module):
         # hi, batch * num_hidden * rnn_size
         # ci, batch * num_hidden * rnn_size
         # xi, batch * num_hidden * input_encoding_size
+
+        if self.not_use_first:
+            hi = hi[:, 1:, :]
+            ci = ci[:, 1:, :]
+            xi = xi[:, 1:, :]
 
         num_hidden = ci.size(1)
 
