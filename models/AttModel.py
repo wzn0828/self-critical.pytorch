@@ -1370,13 +1370,27 @@ class IntraAttention(nn.Module):
         self.word_sensitive_coefficient = opt.word_sensitive_coefficient
         self.word_sensitive_hi_xi = opt.word_sensitive_hi_xi
         self.not_use_first = opt.not_use_first
+        self.position_sentive_inter = opt.position_sentive_inter
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
         self.hi2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+
+        if self.position_sentive_inter:
+            self.hi2atts = nn.ModuleList([nn.Linear(self.rnn_size, self.att_hid_size, bias=True) for _ in range(16)])
+            for i in range(len(self.hi2atts)):
+                if i == 0:
+                    nonlinear = 'linear'
+                else:
+                    nonlinear = 'tanh'
+                model_utils.xavier_uniform(nonlinear, self.hi2atts[i])
+        else:
+            self.hi2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+            model_utils.xavier_uniform('tanh', self.hi2att)
+
         self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
         # initialization
-        model_utils.xavier_uniform('tanh', self.xt2att, self.hl2att, self.hi2att)
+        model_utils.xavier_uniform('tanh', self.xt2att, self.hl2att)
         model_utils.kaiming_normal('relu', 0, self.alpha_net)
 
         if not self.LSTMN_last_att_hidden:
@@ -1471,7 +1485,16 @@ class IntraAttention(nn.Module):
         num_hidden = hi.size(1)
 
         att_xt = self.xt2att(xt)  # batch * att_hid_size
-        att_hi = self.hi2att(hi)  # batch * num_hidden * att_hid_size
+
+        if self.position_sentive_inter:
+            att_hi = []
+            for i in range(num_hidden):
+                att_hi.append(self.hi2atts[i](hi[:, i, :]).unsqueeze(1))      # batch * att_hid_size
+            att_hi = torch.cat(att_hi, 1)  # batch * num_hidden * att_hid_size
+        else:
+            att_hi = self.hi2att(hi)  # batch * num_hidden * att_hid_size
+
+
         att_xt = att_xt.unsqueeze(1).expand_as(att_hi)  # batch * num_hidden * att_hid_size
 
         if self.LSTMN_last_att_hidden:
