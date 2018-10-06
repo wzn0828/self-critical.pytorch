@@ -1,4 +1,8 @@
 from torch.nn import init
+import torch
+import torch.nn as nn
+from torch.nn import Parameter
+import torch.nn.functional as F
 
 #-----model initialization-----#
 def xavier_uniform(nonlinearity='linear', *modules):
@@ -72,3 +76,41 @@ def lstm_init(lstm_Module):
             param.data[hidden_size:2 * hidden_size] = 0.5
         elif 'weight_' in name:
             init.orthogonal_(param)
+
+
+
+class LayerNormLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, layer_norm=True):
+        super(LayerNormLSTMCell, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.layer_norm = layer_norm
+
+        self.weight_ih = Parameter(torch.Tensor(4 * hidden_size, input_size))
+        self.weight_hh = Parameter(torch.Tensor(4 * hidden_size, hidden_size))
+
+        self.bias_ih = Parameter(torch.Tensor(4 * hidden_size))
+        self.bias_hh = Parameter(torch.Tensor(4 * hidden_size))
+
+        if self.layer_norm:
+            self.ln_ih = nn.LayerNorm(4 * hidden_size)
+            self.ln_hh = nn.LayerNorm(4 * hidden_size)
+            self.ln_ho = nn.LayerNorm(hidden_size)
+        else:
+            self.ln_ih = self.ln_hh = self.ln_ho = lambda x: x
+
+    def forward(self, input, hidden):
+        hx, cx = hidden
+        gates = self.ln_ih(F.linear(input, self.weight_ih)) + self.ln_hh(F.linear(hx, self.weight_hh)) + self.bias_ih + self.bias_hh
+
+        ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+
+        ingate = F.sigmoid(ingate)
+        forgetgate = F.sigmoid(forgetgate)
+        cellgate = F.tanh(cellgate)
+        outgate = F.sigmoid(outgate)
+
+        cy = (forgetgate * cx) + (ingate * cellgate)
+        hy = outgate * F.tanh(self.ln_ho(cy))
+
+        return hy, cy

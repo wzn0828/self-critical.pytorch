@@ -643,9 +643,15 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.LSTMN = opt.LSTMN
         self.input_first_att = opt.input_first_att
         self.input_second_att = opt.input_second_att
+        self.lstm_layer_norm = opt.lstm_layer_norm
+        self.layer_norm = opt.layer_norm
 
-        self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
-        self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
+        if self.lstm_layer_norm:
+            self.att_lstm = model_utils.LayerNormLSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size, self.layer_norm)  # we, fc, h^2_t-1
+            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size * 2, opt.rnn_size, self.layer_norm)  # h^1_t, \hat v
+        else:
+            self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
+            self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
 
         if self.LSTMN:
             if self.input_first_att == 1:
