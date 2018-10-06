@@ -196,8 +196,13 @@ class AttModel(CaptionModel):
                                                     average_att_feat, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
-            att_hiddens.append(state[0][0])
-            lan_hiddens.append(state[0][1])
+            if not self.LSTMN:
+                att_hiddens.append(state[0][0])
+                lan_hiddens.append(state[0][1])
+            else:
+                att_hiddens.append(state[-1][0])
+                lan_hiddens.append(state[-1][2])
+
             att_sentinals.append(state[-1][0])
             lang_sentinals.append(state[-1][1])
             if i==6:

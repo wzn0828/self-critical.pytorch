@@ -43,10 +43,14 @@ def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
         tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
         # # add affined att_feat histogram
         # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+
         # add att_hiddens histogram
-        tb_summary_writer.add_histogram('att_hiddens', att_hiddens, iteration)
+        for i in range(len(att_hiddens)):
+            tb_summary_writer.add_histogram('att_hiddens/_'+str(i+1), att_hiddens[i], iteration)
         # add lan_hiddens histogram
-        tb_summary_writer.add_histogram('lan_hiddens', lan_hiddens, iteration)
+        for i in range(len(lan_hiddens)):
+            tb_summary_writer.add_histogram('lan_hiddens/_'+str(i+1), lan_hiddens[i], iteration)
+
         # add att_sentinel histogram
         tb_summary_writer.add_histogram('att_sentinel', att_sentinels, iteration)
         # add lang_sentinel histogram
