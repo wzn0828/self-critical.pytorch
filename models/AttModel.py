@@ -236,6 +236,7 @@ class AttModel(CaptionModel):
         # lets process every image independently for now, for simplicity
 
         self.done_beams = [[] for _ in range(batch_size)]
+        self.states = [[] for _ in range(batch_size)]
         for k in range(batch_size):
             state = self.init_hidden(beam_size)
             tmp_fc_feats = p_fc_feats[k:k + 1].expand(beam_size, p_fc_feats.size(1))
@@ -252,14 +253,26 @@ class AttModel(CaptionModel):
                 logprobs, state, lang_weights = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
                                                           tmp_att_masks, tmp_average_att_feat, state)
 
-            self.done_beams[k] = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
+            self.done_beams[k], states = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
                                                   tmp_att_masks, tmp_average_att_feat, opt=opt)
+            self.states[k] = [state[:, 0, :] for state in states[0][1:]]
             seq[:, k] = self.done_beams[k][0]['seq']  # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
+
+        att_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
+        lang_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
+        for i, state in enumerate(self.states):
+            for j, item in enumerate(state):
+                att_hiddens[j, i, :] = item[0, :]
+                lang_hiddens[j, i, :] = item[2, :]
+
         # return the samples and their log likelihoods
-        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
+        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), att_hiddens, lang_hiddens
 
     def _sample(self, fc_feats, att_feats, att_masks=None, opt={}):
+
+        att_hiddens = []
+        lan_hiddens = []
 
         sample_max = opt.get('sample_max', 1)
         beam_size = opt.get('beam_size', 1)
@@ -282,6 +295,13 @@ class AttModel(CaptionModel):
 
             logprobs, state, lang_weights = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
                                                       state)  # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
+
+            if not self.LSTMN:
+                att_hiddens.append(state[0][0])
+                lan_hiddens.append(state[0][1])
+            else:
+                att_hiddens.append(state[-1][0])
+                lan_hiddens.append(state[-1][2])
 
             if decoding_constraint and t > 0:
                 tmp = logprobs.new_zeros(logprobs.size())
@@ -316,7 +336,7 @@ class AttModel(CaptionModel):
             if unfinished.sum() == 0:
                 break
 
-        return seq, seqLogprobs
+        return seq, seqLogprobs, torch.stack(att_hiddens), torch.stack(lan_hiddens)
 
 
 class AdaAtt_lstm(nn.Module):

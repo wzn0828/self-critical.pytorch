@@ -108,7 +108,8 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         fc_feats, att_feats, att_masks = tmp
         # forward the model to also get generated samples for each image
         with torch.no_grad():
-            seq = model(fc_feats, att_feats, att_masks, opt=eval_kwargs, mode='sample')[0].data
+            outputs = model(fc_feats, att_feats, att_masks, opt=eval_kwargs, mode='sample')
+            seq = outputs[0].data
 
         # fproducing the ciderd score, first producing the groudtruth file gts and the evaluated file res
         if ciderd:
