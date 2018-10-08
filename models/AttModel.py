@@ -763,7 +763,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
-        if step > 1:
+        if self.LSTMN and step > 1:
             xi = torch.cat([_[4].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
 
         if self.LSTMN:
