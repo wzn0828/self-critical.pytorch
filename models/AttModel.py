@@ -65,6 +65,7 @@ class AttModel(CaptionModel):
         self.att_hid_size = opt.att_hid_size
         self.tie_weights = opt.tie_weights
         self.LSTMN = opt.LSTMN
+        self.LN_out_embedding = opt.LN_out_embedding
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -105,6 +106,9 @@ class AttModel(CaptionModel):
             del self.logit
             self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
             self.logit.weight = self.embed[0].weight
+
+        if self.LN_out_embedding:
+            self.ln_out_embedding = nn.LayerNorm(self.rnn_size)
 
         # initialization
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
@@ -214,6 +218,10 @@ class AttModel(CaptionModel):
             att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
+        # layer normal output embedding matrix
+        if self.LN_out_embedding:
+            self.logit.weight.data = self.ln_out_embedding(self.logit.weight)
+
         # 'it' contains a word index
         xt = self.embed(it)  # [batch_size, input_encoding_size]
 
