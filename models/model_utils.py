@@ -80,11 +80,13 @@ def lstm_init(lstm_Module):
 
 
 class LayerNormLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, layer_norm=True):
+    def __init__(self, input_size, hidden_size, layer_norm=True, norm_input=True, norm_output=True):
         super(LayerNormLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.layer_norm = layer_norm
+        self.norm_input = norm_input
+        self.norm_output = norm_output
 
         self.weight_ih = Parameter(torch.Tensor(4 * hidden_size, input_size))
         self.weight_hh = Parameter(torch.Tensor(4 * hidden_size, hidden_size))
@@ -93,9 +95,15 @@ class LayerNormLSTMCell(nn.Module):
         self.bias_hh = Parameter(torch.Tensor(4 * hidden_size))
 
         if self.layer_norm:
-            self.ln_ih = nn.LayerNorm(4 * hidden_size)
-            self.ln_hh = nn.LayerNorm(4 * hidden_size)
-            self.ln_ho = nn.LayerNorm(hidden_size)
+            if self.norm_input:
+                self.ln_ih = nn.LayerNorm(4 * hidden_size)
+                self.ln_hh = nn.LayerNorm(4 * hidden_size)
+            else:
+                self.ln_ih = self.ln_hh = lambda x: x
+            if self.norm_output:
+                self.ln_ho = nn.LayerNorm(hidden_size)
+            else:
+                self.ln_ho = lambda x: x
         else:
             self.ln_ih = self.ln_hh = self.ln_ho = lambda x: x
 
