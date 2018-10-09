@@ -80,13 +80,14 @@ def lstm_init(lstm_Module):
 
 
 class LayerNormLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, layer_norm=True, norm_input=True, norm_output=True):
+    def __init__(self, input_size, hidden_size, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
         super(LayerNormLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.layer_norm = layer_norm
         self.norm_input = norm_input
         self.norm_output = norm_output
+        self.norm_hidden = norm_hidden
 
         self.weight_ih = Parameter(torch.Tensor(4 * hidden_size, input_size))
         self.weight_hh = Parameter(torch.Tensor(4 * hidden_size, hidden_size))
@@ -100,12 +101,19 @@ class LayerNormLSTMCell(nn.Module):
                 self.ln_hh = nn.LayerNorm(4 * hidden_size)
             else:
                 self.ln_ih = self.ln_hh = lambda x: x
+
             if self.norm_output:
                 self.ln_ho = nn.LayerNorm(hidden_size)
             else:
                 self.ln_ho = lambda x: x
+
+            if self.norm_hidden:
+                self.ln_ht = nn.LayerNorm(hidden_size)
+            else:
+                self.ln_ht = lambda x: x
+
         else:
-            self.ln_ih = self.ln_hh = self.ln_ho = lambda x: x
+            self.ln_ih = self.ln_hh = self.ln_ho = self.ln_ht = lambda x: x
 
     def forward(self, input, hidden):
         hx, cx = hidden
@@ -119,6 +127,6 @@ class LayerNormLSTMCell(nn.Module):
         outgate = F.sigmoid(outgate)
 
         cy = (forgetgate * cx) + (ingate * cellgate)
-        hy = outgate * F.tanh(self.ln_ho(cy))
+        hy = self.ln_ht(outgate * F.tanh(self.ln_ho(cy)))
 
         return hy, cy
