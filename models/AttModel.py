@@ -65,6 +65,7 @@ class AttModel(CaptionModel):
         self.att_hid_size = opt.att_hid_size
         self.tie_weights = opt.tie_weights
         self.LSTMN = opt.LSTMN
+        self.adaptive_t0 = opt.adaptive_t0
         self.LN_out_embedding = opt.LN_out_embedding
 
         self.use_bn = getattr(opt, 'use_bn', 0)
@@ -116,10 +117,24 @@ class AttModel(CaptionModel):
                                    filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0], self.logit)
         model_utils.xavier_uniform('tanh', self.ctx2att)
 
+        if self.LSTMN and self.adaptive_t0:
+            self.h1t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
+            self.c1t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
+            self.h2t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
+            self.c2t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
+            nn.init.normal_(self.h1t0, mean=0, std=0.2)
+            nn.init.normal_(self.c1t0, mean=0, std=0.2)
+            nn.init.normal_(self.h2t0, mean=0, std=0.1)
+            nn.init.normal_(self.c2t0, mean=0, std=0.1)
+
     def init_hidden(self, bsz):
         weight = next(self.parameters())
         if self.LSTMN:
-            return (weight.new_zeros(2*self.num_layers+1, bsz, self.rnn_size),)   # h01,c01,h02,c02,xt
+            if self.adaptive_t0:
+                return (torch.cat([self.h1t0, self.c1t0, self.h2t0, self.c2t0, weight.new_zeros(1, 1, self.rnn_size)],
+                                  0).expand(-1, bsz, -1),)
+            else:
+                return (weight.new_zeros(2 * self.num_layers + 1, bsz, self.rnn_size),)  # h01,c01,h02,c02,xt
         else:
             return (weight.new_zeros(self.num_layers, bsz, self.rnn_size),
                     weight.new_zeros(self.num_layers, bsz, self.rnn_size),
