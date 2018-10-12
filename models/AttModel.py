@@ -1347,6 +1347,8 @@ class SentinalAttention(nn.Module):
             model_utils.xavier_normal('linear', self.general_att)
         elif self.att_score_method == 'cosine':
             self.cos = nn.CosineSimilarity(dim=2)
+        elif self.att_score_method == 'scaled_dot':
+            self.scale = nn.Parameter(torch.Tensor([22.6]))
 
     def forward(self, h, sentinal):
         if self.att_score_method == 'mlp':
@@ -1407,7 +1409,7 @@ class SentinalAttention(nn.Module):
         h = h.unsqueeze(1)      # batch*1*rnn_size
         sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
-        return torch.bmm(h, sentinal).squeeze(1)/22.6      # batch * num_hidden
+        return torch.bmm(h, sentinal).squeeze(1)/self.scale      # batch * num_hidden
 
 
 
