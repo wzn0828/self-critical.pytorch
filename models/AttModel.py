@@ -1337,6 +1337,7 @@ class SentinalAttention(nn.Module):
         super(SentinalAttention, self).__init__()
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
+        self.lang_no_h0 = opt.lang_no_h0
 
         self.att_score_method = opt.att_score_method
         if self.att_score_method == 'mlp':
@@ -1355,6 +1356,9 @@ class SentinalAttention(nn.Module):
             self.scale = nn.Parameter(torch.Tensor([22.6]))
 
     def forward(self, h, sentinal):
+        if self.lang_no_h0 and sentinal.size(1) > 1:
+            sentinal = sentinal[:, 1:, :]
+
         if self.att_score_method == 'mlp':
             dot_senti = self.mlp_att_score(h, sentinal)
         elif self.att_score_method == 'dot':
