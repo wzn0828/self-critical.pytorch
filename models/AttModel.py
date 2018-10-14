@@ -67,6 +67,7 @@ class AttModel(CaptionModel):
         self.LSTMN = opt.LSTMN
         self.adaptive_t0 = opt.adaptive_t0
         self.LN_out_embedding = opt.LN_out_embedding
+        self.print_lang_weights = opt.print_lang_weights
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -318,6 +319,9 @@ class AttModel(CaptionModel):
 
             logprobs, state, lang_weights = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
                                                       state)  # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
+
+            if self.print_lang_weights:
+                print(lang_weights)
 
             if not self.LSTMN:
                 att_hiddens.append(state[0][0])
