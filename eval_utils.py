@@ -18,10 +18,10 @@ import sys
 sys.path.append("cider")
 from pyciderevalcap.ciderD.ciderD import CiderD
 
-def language_eval(dataset, preds, model_id, split):
+def language_eval(dataset, preds, model_id, split, annFile=None):
     import sys
     sys.path.append("coco-caption")
-    annFile = 'coco-caption/annotations/captions_val2014.json'
+
     from pycocotools.coco import COCO
     from pycocoevalcap.eval import COCOEvalCap
 
@@ -68,6 +68,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     dataset = eval_kwargs.get('dataset', 'coco')
     beam_size = eval_kwargs.get('beam_size', 1)
     ciderd = eval_kwargs.get('ciderd', False)
+    annFile = eval_kwargs.get('annfile', None)
 
     # Make sure in the evaluation mode
     model.eval()
@@ -169,7 +170,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
 
     lang_stats = None
     if lang_eval == 1:
-        lang_stats = language_eval(dataset, predictions, eval_kwargs['id'], split)
+        lang_stats = language_eval(dataset, predictions, eval_kwargs['id'], split, annFile)
 
     # Switch back to training mode
     model.train()

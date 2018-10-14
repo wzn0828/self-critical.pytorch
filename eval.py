@@ -166,7 +166,7 @@ else:
 # So make sure to use the vocab in infos file.
 loader.ix_to_word = infos['vocab']
 
-
+assert opt.annfile is not None and len(opt.annfile) > 0
 # Set sample options
 loss, split_predictions, lang_stats = eval_utils.eval_split(model, crit, loader,
     vars(opt))

@@ -184,6 +184,8 @@ def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration,
 
 
 def train(opt):
+    assert opt.annfile is not None and len(opt.annfile)>0
+
     print('Checkpoint path is ' + opt.checkpoint_path)
     print('This program is using GPU '+ str(os.environ['CUDA_VISIBLE_DEVICES']))
     # Deal with feature things before anything
