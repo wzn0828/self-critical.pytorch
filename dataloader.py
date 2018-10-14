@@ -37,6 +37,8 @@ class DataLoader(data.Dataset):
         self.seq_per_img = opt.seq_per_img
 
         self.specified_id = opt.specified_id
+
+        self.dataset = opt.dataset
         
         # feature related options
         self.use_att = getattr(opt, 'use_att', True)
@@ -102,6 +104,8 @@ class DataLoader(data.Dataset):
 
         # subset for evaluation of train data
         seed(123)
+        if self.dataset in ['flickr30k', 'flickr8k']:
+            train_eval = self.split_ix['train']
         self.split_ix['train_eval'] = [train_eval[i] for i in
                                  sorted(sample(range(len(train_eval)), opt.train_eval_images_use))]
 
