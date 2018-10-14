@@ -284,10 +284,10 @@ class AttModel(CaptionModel):
 
         att_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
         lang_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
-        for i, state in enumerate(self.states):
-            for j, item in enumerate(state):
-                att_hiddens[j, i, :] = item[0, :]
-                lang_hiddens[j, i, :] = item[2, :]
+        # for i, state in enumerate(self.states):
+        #     for j, item in enumerate(state):
+        #         att_hiddens[j, i, :] = item[0, :]
+        #         lang_hiddens[j, i, :] = item[2, :]
 
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), att_hiddens, lang_hiddens
