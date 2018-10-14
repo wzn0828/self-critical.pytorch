@@ -35,6 +35,8 @@ class DataLoader(data.Dataset):
         self.opt = opt
         self.batch_size = self.opt.batch_size
         self.seq_per_img = opt.seq_per_img
+
+        self.specified_id = opt.specified_id
         
         # feature related options
         self.use_att = getattr(opt, 'use_att', True)
@@ -69,7 +71,7 @@ class DataLoader(data.Dataset):
         print('read %d image features' %(self.num_images))
 
         # separate out indexes for each of the provided splits
-        self.split_ix = {'train': [], 'val': [], 'test': [], 'train_eval': [], 'raw_val': [], 'raw_train': [], 'online_val': [], 'val&test': []}
+        self.split_ix = {'train': [], 'val': [], 'test': [], 'train_eval': [], 'raw_val': [], 'raw_train': [], 'online_val': [], 'val&test': [], 'specified': []}
         train_eval = []
         for ix in range(len(self.info['images'])):
             img = self.info['images'][ix]
@@ -92,6 +94,9 @@ class DataLoader(data.Dataset):
                 self.split_ix['raw_val'].append(ix)
                 self.split_ix['raw_train'].append(ix)
 
+            if img['id'] in self.specified_id:
+                self.split_ix['specified'].append(ix)
+
         self.split_ix['online_val'] = train_eval[-1000:]
         self.split_ix['raw_train'] = list(set(self.split_ix['raw_train']) - set(self.split_ix['online_val']))
 
@@ -108,8 +113,9 @@ class DataLoader(data.Dataset):
         print('assigned %d images to split raw_train' % len(self.split_ix['raw_train']))
         print('assigned %d images to split online_val' % len(self.split_ix['online_val']))
         print('assigned %d images to split val&test' % len(self.split_ix['val&test']))
+        print('assigned %d images to split specified' % len(self.split_ix['specified']))
 
-        self.iterators = {'train': 0, 'val': 0, 'test': 0, 'train_eval': 0, 'raw_val': 0, 'raw_train': 0, 'online_val': 0, 'val&test': 0}
+        self.iterators = {'train': 0, 'val': 0, 'test': 0, 'train_eval': 0, 'raw_val': 0, 'raw_train': 0, 'online_val': 0, 'val&test': 0, 'specified': 0}
         
         self._prefetch_process = {} # The three prefetch process
         for split in self.iterators.keys():
