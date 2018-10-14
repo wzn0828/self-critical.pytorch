@@ -1371,7 +1371,7 @@ class SentinalAttention(nn.Module):
         att_res_senti = torch.bmm(weight_senti, sentinal).squeeze(1)  # batch * rnn_size
         # --end----recurrent attention-----#
 
-        return att_res_senti, weight_senti  # batch * rnn_size, batch * num_hidden
+        return att_res_senti, weight_senti.squeeze(1)  # batch * rnn_size, batch * num_hidden
 
     def mlp_att_score(self, h, sentinal):
         # sentinal's shape is batch * num_hidden * rnn_size
