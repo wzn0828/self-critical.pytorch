@@ -8,7 +8,7 @@ code_src/data/annotations
 runs/
 data/
 eval_results/
-cider/
+cider/data/
 coco-caption/
 vis/
 figure/
