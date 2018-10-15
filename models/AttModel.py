@@ -283,15 +283,15 @@ class AttModel(CaptionModel):
             seq[:, k] = self.done_beams[k][0]['seq']  # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
 
-        att_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
-        lang_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
+        # att_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
+        # lang_hiddens = fc_feats.new_empty((len(self.states[0]), len(self.states), self.states[0][0].size(1)))
         # for i, state in enumerate(self.states):
         #     for j, item in enumerate(state):
         #         att_hiddens[j, i, :] = item[0, :]
         #         lang_hiddens[j, i, :] = item[2, :]
 
         # return the samples and their log likelihoods
-        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), att_hiddens, lang_hiddens
+        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
 
     def _sample(self, fc_feats, att_feats, att_masks=None, opt={}):
 
@@ -363,7 +363,7 @@ class AttModel(CaptionModel):
             if unfinished.sum() == 0:
                 break
 
-        return seq, seqLogprobs, torch.stack(att_hiddens), torch.stack(lan_hiddens)
+        return seq, seqLogprobs
 
 
 class AdaAtt_lstm(nn.Module):
