@@ -690,6 +690,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.LSTMN = opt.LSTMN
         self.LSTMN_att = opt.LSTMN_att
         self.LSTMN_lang = opt.LSTMN_lang
+        self.LSTMN_lang_att_score_method = opt.LSTMN_lang_att_score_method
         self.input_first_att = opt.input_first_att
         self.input_second_att = opt.input_second_att
         self.lstm_layer_norm = opt.lstm_layer_norm
@@ -712,13 +713,13 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 input_first_att_size = self.input_encoding_size + self.rnn_size
             elif self.input_first_att == 3:
                 input_first_att_size = self.input_encoding_size + 2*self.rnn_size
-            self.intra_att_att_lstm = IntraAttention(opt, input_first_att_size)
+            self.intra_att_att_lstm = IntraAttention(opt, input_first_att_size, opt.LSTMN_att_att_score_method)
 
             if self.input_second_att == 1:
                 input_second_att_size = self.rnn_size
             if self.input_second_att == 2:
                 input_second_att_size = 2*self.rnn_size
-            self.intra_att_lang_lstm = IntraAttention(opt, input_second_att_size)
+            self.intra_att_lang_lstm = IntraAttention(opt, input_second_att_size, opt.LSTMN_lang_att_score_method)
 
         self.attention = Attention(opt)
         if opt.weighted_hidden:
@@ -1424,7 +1425,7 @@ class SentinalAttention(nn.Module):
 
 
 class IntraAttention(nn.Module):
-    def __init__(self, opt, xt_dimension):
+    def __init__(self, opt, xt_dimension, att_score_method):
         super(IntraAttention, self).__init__()
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
@@ -1440,6 +1441,7 @@ class IntraAttention(nn.Module):
         self.word_sensitive_hi_xi = opt.word_sensitive_hi_xi
         self.not_use_first = opt.not_use_first
         self.position_sentive_inter = opt.position_sentive_inter
+        self.att_score_method = att_score_method
 
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
@@ -1487,6 +1489,12 @@ class IntraAttention(nn.Module):
         if self.distance_sensitive_coefficient:
             self.coefficient = nn.Parameter(self.alpha_net.weight.data.new_ones((1, 16)))
 
+        if self.att_score_method == 'general':
+            self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
+            model_utils.xavier_normal('linear', self.general_att)
+        elif self.att_score_method == 'scaled_dot':
+            self.scale = nn.Parameter(torch.Tensor([1.0]))
+
     def forward(self, xt, last_att_hl, hi, ci, xi):
         # xt, batch * input_encoding_size
         # last_att_hl, batch * rnn_size
@@ -1506,7 +1514,13 @@ class IntraAttention(nn.Module):
             key = hi
         else:
             key = ci
-        att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
+
+        if self.att_score_method == 'mlp':
+            att_score = self.mlp_att_score(xt, last_att_hl, key)  # batch * num_hidden
+        elif self.att_score_method == 'general':
+            att_score = self.general_att_score(xt, key)
+        elif self.att_score_method == 'scaled_dot':
+            att_score = self.scaled_dot_att_score(xt, key)
 
         if self.word_sensitive_hi_xi == 1:
             key = xi
@@ -1579,6 +1593,22 @@ class IntraAttention(nn.Module):
         att_score = att_score.view(-1, num_hidden)  # batch * num_hidden
 
         return att_score
+
+    def general_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1)      # batch*1*rnn_size
+        h = self.general_att(h)       # batch*1*rnn_size
+        sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
+
+        return torch.bmm(h, sentinal).squeeze(1)       # batch * num_hidden
+
+    def scaled_dot_att_score(self, h, sentinal):
+        # sentinal's shape is batch * num_hidden * rnn_size
+        h = h.unsqueeze(1)      # batch*1*rnn_size
+        sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
+
+        return torch.bmm(h, sentinal).squeeze(1)/self.scale      # batch * num_hidden
+
 
 
 class O_SentinalAttention(SentinalAttention):
