@@ -688,6 +688,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.attention_gate = opt.attention_gate
         self.directly_add_2_layer = opt.directly_add_2_layer
         self.LSTMN = opt.LSTMN
+        self.LSTMN_att = opt.LSTMN_att
+        self.LSTMN_lang = opt.LSTMN_lang
         self.input_first_att = opt.input_first_att
         self.input_second_att = opt.input_second_att
         self.lstm_layer_norm = opt.lstm_layer_norm
@@ -826,10 +828,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
-            if step < 2:
+            if step < 2 or not self.LSTMN_att:
                 h1 = state[-1][0]
                 c1 = state[-1][1]
-                layer1_weights = h1.new_ones((h1.size(0), 1))
+                layer1_weights = h1.new_zeros((h1.size(0), 1))
             else:
                 last_att_h1 = state[0][0]
                 hi = torch.cat([_[0].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
@@ -858,10 +860,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
         if self.LSTMN:
-            if step < 2:
+            if step < 2 or not self.LSTMN_lang:
                 h2 = state[-1][2]
                 c2 = state[-1][3]
-                layer2_weights = h2.new_ones((h2.size(0), 1))
+                layer2_weights = h2.new_zeros((h2.size(0), 1))
             else:
                 last_att_h2 = state[0][1]
                 hi = torch.cat([_[2].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
