@@ -177,7 +177,7 @@ def main(params):
                                                                    img['filename'])  # copy it over, might need
             if 'cocoid' in img: jimg['id'] = img[
                 'cocoid']  # copy over & mantain an id, if present (e.g. coco ids, useful)
-        elif dataset == 'flickr30k':
+        elif dataset in ['flickr30k', 'flickr8k']:
             if 'filename' in img: jimg['file_path'] = img['filename']  # copy it over, might need
             if 'imgid' in img: jimg['id'] = img['imgid']  # copy over & mantain an id, if present (e.g. coco ids, useful)
 
@@ -209,10 +209,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    args.input_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR30K/dataset_flickr30k.json'
-    args.output_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR30K/flickr30k_talk.json'
-    args.output_h5 = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR30K/flickr30k_talk'
-    args.dataset = 'flickr30k'  # coco, flickr30k,  flickr8k
+    # local set
+    args.input_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/dataset_flickr8k.json'
+    args.output_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/flickr8k_talk.json'
+    args.output_h5 = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/flickr8k_talk'
+    args.dataset = 'flickr8k'  # coco, flickr30k,  flickr8k
+    # local set
 
     params = vars(args)  # convert to ordinary dict
 
