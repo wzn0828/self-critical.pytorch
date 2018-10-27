@@ -813,12 +813,18 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         model_utils.lstm_init(self.att_lstm)
         model_utils.lstm_init(self.lang_lstm)
 
+        if self.language_attention and self.LSTMN:
+            self.Intergrate2vector = Intergrate2vector(opt, opt.Intergrate2vector)
+            self.Intergrate_instead = opt.Intergrate_instead
+
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
-        if self.LSTMN and step > 1:
+        if self.LSTMN and step > 0:
             xi = torch.cat([_[4].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
 
+        # --start-------first LSTM--------#
         if self.LSTMN:
             h2 = state[-1][2]
         else:
@@ -853,7 +859,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.att_gate_input1(att_lstm_input) + self.att_gate_h1(h1)))
 
         h_att, c_att = self.att_lstm(att_lstm_input, (h1, c1))  # both are [batch_size, rnn_size]
+        # --end-------first LSTM-------- #
 
+        # --start-------second LSTM-------- #
         att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
         droped_h_att = F.dropout(h_att, self.drop_prob_rnn, self.training)
@@ -879,14 +887,30 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(h2)))
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h2, c2))  # batch*rnn_size
+        # --end------second LSTM--------#
 
+        # --start-------generate output--------#
         if self.language_attention:
-            pre_sentinal = state[2:]
-            # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
-            sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal], 1)  # [batch_size, num_recurrent, rnn_size]
-            weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
-            affined = self.tgh(
-                self.h2_affine(self.drop(h_lang)) + self.ws_affine(self.drop(weighted_sentinal)))  # batch_size * rnn_size
+            if self.LSTMN:
+                p_h_lang = self.h2_affine(self.drop(h_lang))
+                if step > 0:
+                    p_h_pre, lang_weights = self.sen_attention(p_h_lang, xi)            # batch * rnn_size, batch * num_hidden
+                    inter_v, prob_v1 = self.Intergrate2vector(p_h_pre, p_h_lang)        # batch*rnn_size, batch*1
+                    lang_weights = prob_v1 * lang_weights
+                    lang_weights = torch.cat((lang_weights, (1.0 - prob_v1)), 1)        # batch * num_hidden
+                else:
+                    inter_v = p_h_lang
+                    lang_weights = torch.zeros_like(h2)
+                affined = self.tgh(inter_v)  # batch*rnn_size
+            else:
+                pre_sentinal = state[2:]
+                # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
+                sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal],
+                                     1)  # [batch_size, num_recurrent, rnn_size]
+                weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
+                affined = self.tgh(
+                    self.h2_affine(self.drop(h_lang)) + self.ws_affine(
+                        self.drop(weighted_sentinal)))  # batch_size * rnn_size
         else:
             if self.add_2_layer_hidden:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att)))
@@ -900,21 +924,30 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 lang_weights = torch.zeros_like(h2)
 
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
+        # --end-------generate output--------#
 
         # --start-------generate state--------#
-
         if self.LSTMN:
-            state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (torch.stack([h_att, c_att, h_lang, c_lang, xt]),)
+            if self.language_attention:
+                if self.Intergrate_instead:
+                    state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                    torch.stack([h_att, c_att, h_lang, c_lang, inter_v]),)
+                else:
+                    state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                        torch.stack([h_att, c_att, h_lang, c_lang, p_h_lang]),)
+            else:
+                state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                torch.stack([h_att, c_att, h_lang, c_lang, xt]),)
         else:
             if self.transfer_horizontal:
                 state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
             else:
                 state = (torch.stack([h_att, h_lang]), torch.stack([c_att, c_lang]))
 
-        if self.language_attention:
-            sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
-            sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
-            state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
+            if self.language_attention:
+                sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
+                sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
+                state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
         # --end-------generate state--------#
 
         return output, state, lang_weights
@@ -1335,6 +1368,64 @@ class AttentionRecurrent(nn.Module):
         return att_res_senti  # batch * rnn_size
 
 
+class Intergrate2vector(nn.Module):
+    def __init__(self, opt, inter_method):
+        super(Intergrate2vector, self).__init__()
+        self.rnn_size = opt.rnn_size
+        self.att_hid_size = opt.att_hid_size
+
+        self.inter_method = inter_method
+        if self.inter_method == 'concat':
+            self.v1_pro = nn.Linear(self.rnn_size, self.att_hid_size)
+            self.v2_pro = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+            self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
+            # initialization
+            model_utils.xavier_normal('tanh', self.v1_pro, self.v2_pro)
+            model_utils.xavier_normal('sigmoid', self.alpha_net)
+        elif self.inter_method == 'self_attention':
+            self.v_pro = nn.Linear(self.rnn_size, self.att_hid_size)
+            self.alpha_1 = nn.Linear(self.att_hid_size, 1, bias=False)
+            self.alpha_2 = nn.Linear(self.att_hid_size, 1, bias=False)
+            # initialization
+            model_utils.xavier_normal('tanh', self.v_pro)
+            model_utils.kaiming_normal('relu', 0, self.alpha_1, self.alpha_2)
+        elif self.inter_method == 'self_attention_tying_alpha':
+            self.v_pro = nn.Linear(self.rnn_size, self.att_hid_size)
+            self.alpha_1 = self.alpha_2 = nn.Linear(self.att_hid_size, 1, bias=False)
+            # initialization
+            model_utils.xavier_normal('tanh', self.v_pro)
+            model_utils.kaiming_normal('relu', 0, self.alpha_1, self.alpha_2)
+
+    def forward(self, v1, v2):
+        # size of both is batch*rnn_size
+
+        if self.inter_method == 'concat':
+            prob_v1 = self.concat_prob(v1, v2)              # batch * 1
+        elif 'self_attention' in self.inter_method:
+            prob_v1 = self.self_attention_prob(v1, v2)      # batch * 1
+
+        inter_v = prob_v1 * v1 + (1.0 - prob_v1) * v2
+
+        return inter_v, prob_v1     # batch*rnn_size, batch*1
+
+    def self_attention_prob(self, v1, v2):
+        v1_score = self.alpha_1(F.tanh(self.v_pro(v1)))  # batch * 1
+        v2_score = self.alpha_2(F.tanh(self.v_pro(v2)))  # batch * 1
+        score = torch.cat((v1_score, v2_score), 1)  # batch * 2
+        weights = F.softmax(score, dim=1)       # batch * 2
+
+        return weights[:, 0].unsqueeze(1)       # batch * 1
+
+    def concat_prob(self, v1, v2):
+        # size of both is batch * rnn_size
+        p_v1 = self.v1_pro(v1)  # batch * att_hid_size
+        p_v2 = self.v2_pro(v2)  # batch * att_hid_size
+        score = self.alpha_net(F.tanh(p_v1 + p_v2))  # batch * 1
+        prob = F.sigmoid(score)     # batch * 1
+
+        return prob                 # batch * 1
+
+
 class SentinalAttention(nn.Module):
     def __init__(self, opt):
         super(SentinalAttention, self).__init__()
@@ -1421,7 +1512,6 @@ class SentinalAttention(nn.Module):
         sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
         return torch.bmm(h, sentinal).squeeze(1)/self.scale      # batch * num_hidden
-
 
 
 class IntraAttention(nn.Module):
