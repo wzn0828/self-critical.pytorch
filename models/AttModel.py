@@ -1444,6 +1444,7 @@ class SentinalAttention(nn.Module):
         elif self.att_score_method == 'general':
             self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
             model_utils.xavier_normal('linear', self.general_att)
+            self.general_att.weight.data = self.general_att.weight/(self.rnn_size**0.5)
         elif self.att_score_method == 'cosine':
             self.cos = nn.CosineSimilarity(dim=2)
         elif self.att_score_method == 'scaled_dot':
