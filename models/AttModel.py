@@ -816,7 +816,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         if self.language_attention and self.LSTMN:
             self.Intergrate2vector = Intergrate2vector(opt, opt.Intergrate2vector)
             self.Intergrate_instead = opt.Intergrate_instead
-
+            self.lang_att_before_pro = opt.lang_att_before_pro
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_states = state[1:]
@@ -892,7 +892,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --start-------generate output--------#
         if self.language_attention:
             if self.LSTMN:
-                p_h_lang = self.h2_affine(self.drop(h_lang))
+                if self.lang_att_before_pro:
+                    p_h_lang = h_lang
+                else:
+                    p_h_lang = self.h2_affine(self.drop(h_lang))
+
                 if step > 0:
                     p_h_pre, lang_weights = self.sen_attention(p_h_lang, xi)            # batch * rnn_size, batch * num_hidden
                     inter_v, prob_v1 = self.Intergrate2vector(p_h_pre, p_h_lang)        # batch*rnn_size, batch*1
@@ -901,7 +905,12 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 else:
                     inter_v = p_h_lang
                     lang_weights = torch.zeros_like(h2)
-                affined = self.tgh(inter_v)  # batch*rnn_size
+
+                if self.lang_att_before_pro:
+                    affined = self.tgh(self.h2_affine(self.drop(inter_v)))
+                else:
+                    affined = self.tgh(inter_v)  # batch*rnn_size
+
             else:
                 pre_sentinal = state[2:]
                 # sentinal = F.dropout(sentinal, self.drop_prob_rnn, self.training)
