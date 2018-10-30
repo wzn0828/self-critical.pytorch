@@ -1452,7 +1452,7 @@ class SentinalAttention(nn.Module):
             model_utils.kaiming_normal('relu', 0, self.alpha_net)
         elif self.att_score_method == 'general':
             self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
-            model_utils.kaiming_normal('linear', self.general_att)
+            model_utils.kaiming_normal('relu', 0, self.general_att)
             self.general_att.weight.data = self.general_att.weight/(self.rnn_size**0.5)
         elif self.att_score_method == 'cosine':
             self.cos = nn.CosineSimilarity(dim=2)
