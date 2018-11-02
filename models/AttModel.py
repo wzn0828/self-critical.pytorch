@@ -95,6 +95,7 @@ class AttModel(CaptionModel):
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
             self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
+            model_utils.kaiming_normal('relu', 0, self.logit)
         else:
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
                           range(opt.logit_layers - 1)]
@@ -108,15 +109,21 @@ class AttModel(CaptionModel):
             del self.logit
             self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
             self.logit.weight = self.embed[0].weight
+            self.project_outputembedding = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
+            # initialization
+            nn.init.normal_(self.project_outputembedding.weight, mean=0, std=(2.0**0.5)/self.rnn_size)
+
 
         if self.LN_out_embedding:
             self.ln_out_embedding = nn.LayerNorm(self.rnn_size)
 
         # initialization
-        nn.init.normal_(self.embed[0].weight, mean=0, std=0.01)
+        nn.init.normal_(self.embed[0].weight, mean=0, std=1)
         model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
-                                   filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0], self.logit)
-        model_utils.xavier_uniform('tanh', self.ctx2att)
+                                   filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
+        model_utils.xavier_normal('tanh', self.ctx2att)
+        self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
+        self.ctx2att.weight.data = self.ctx2att.weight*self.beta
 
         if self.LSTMN and self.adaptive_t0:
             self.h1t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
@@ -745,7 +752,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             model_utils.kaiming_normal('leaky_relu', 0.25, self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'lecun_tanh':
             self.tgh = lambda x: 1.7159 * F.tanh((2.0 / 3.0) * x)
-            model_utils.xavier_uniform('tanh', self.h2_affine, self.ws_affine)
+            model_utils.xavier_normal('tanh', self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'maxout':
             del self.h2_affine, self.ws_affine
             self.h2_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size)
@@ -755,7 +762,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'tanh':
             self.tgh = nn.Tanh()
-            model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
+            model_utils.xavier_normal('tanh', self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'x':
             self.tgh = lambda x: x
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
@@ -768,7 +775,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             model_utils.kaiming_normal('leaky_relu', 0.25, self.sentinal_embed1)
         elif opt.sentinel_nonlinear == 'lecun_tanh':
             self.sentinel_nonlinear = lambda x: 1.7159 * F.tanh((2.0 / 3.0) * x)
-            model_utils.xavier_uniform('tanh', self.sentinal_embed1)
+            model_utils.xavier_normal('tanh', self.sentinal_embed1)
         elif opt.sentinel_nonlinear == 'maxout':
             del self.sentinal_embed1
             self.sentinal_embed1 = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
@@ -785,7 +792,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         if self.add_2_layer_hidden:
             self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-            model_utils.xavier_normal('linear', self.h1_affine)
+            self.beta = ((opt.rnn_size + opt.rnn_size)/(2*opt.rnn_size + float(opt.rnn_size)))**0.5
+            model_utils.xavier_normal(opt.nonlinear, self.h1_affine)
+            self.h1_affine.weight.data = self.h1_affine.weight * self.beta
+            self.h2_affine.weight.data = self.h2_affine.weight * self.beta
 
         if not self.project_hidden:
             del self.h2_affine
@@ -797,17 +807,14 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.h1_affine = lambda x: x
 
         if self.attention_gate:
-            self.att_gate_input1 = nn.Linear(2*opt.rnn_size + opt.input_encoding_size, 2*opt.rnn_size + opt.input_encoding_size)
-            self.att_gate_h1 = nn.Linear(opt.rnn_size, 2*opt.rnn_size + opt.input_encoding_size, bias=False)
-            self.att_gate_input2 = nn.Linear(2*opt.rnn_size, 2*opt.rnn_size)
-            self.att_gate_h2 = nn.Linear(opt.rnn_size, 2*opt.rnn_size, bias=False)
+            self.att_gate_1 = nn.Linear(3 * opt.rnn_size + opt.input_encoding_size,
+                                             2 * opt.rnn_size + opt.input_encoding_size)
+            self.att_gate_2 = nn.Linear(3 * opt.rnn_size, 2 * opt.rnn_size)
 
-            init.orthogonal_(self.att_gate_input1.weight)
-            init.orthogonal_(self.att_gate_h1.weight)
-            init.orthogonal_(self.att_gate_input2.weight)
-            init.orthogonal_(self.att_gate_h2.weight)
-            init.constant_(self.att_gate_input1.bias, 1.0)
-            init.constant_(self.att_gate_input2.bias, 1.0)
+            init.orthogonal_(self.att_gate_1.weight)
+            init.orthogonal_(self.att_gate_2.weight)
+            init.constant_(self.att_gate_1.bias, 1.0)
+            init.constant_(self.att_gate_2.bias, 1.0)
 
         # initialization
         model_utils.lstm_init(self.att_lstm)
@@ -856,7 +863,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         if self.attention_gate:
             att_lstm_input = torch.mul(att_lstm_input, F.sigmoid(
-                self.att_gate_input1(att_lstm_input) + self.att_gate_h1(h1)))
+                self.att_gate_1(torch.cat((att_lstm_input, h1), 1))))
 
         h_att, c_att = self.att_lstm(att_lstm_input, (h1, c1))  # both are [batch_size, rnn_size]
         # --end-------first LSTM-------- #
@@ -884,7 +891,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 h2, c2, layer2_weights = self.intra_att_lang_lstm(input_second_att, last_att_h2, hi,
                                                                  ci, xi)  # batch * rnn_size, batch * num_hidden
         if self.attention_gate:
-            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_input2(lang_lstm_input) + self.att_gate_h2(h2)))
+            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_2(torch.cat((lang_lstm_input, h2), 1))))
 
         h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h2, c2))  # batch*rnn_size
         # --end------second LSTM--------#
@@ -924,7 +931,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             if self.add_2_layer_hidden:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att)))
             elif self.directly_add_2_layer:
-                affined = self.tgh(self.h2_affine(self.drop(h_lang + h_att)))
+                affined = self.tgh(self.h2_affine(self.drop((h_lang + h_att)/1.4142)))
             else:
                 affined = self.tgh(self.h2_affine(self.drop(h_lang)))
             if self.LSTMN:
@@ -1290,7 +1297,9 @@ class Attention(nn.Module):
         self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # initialization
-        model_utils.xavier_uniform('tanh', self.h2att)
+        self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
+        model_utils.xavier_normal('tanh', self.h2att)
+        self.h2att.weight.data = self.h2att.weight*self.beta
         model_utils.kaiming_normal('relu', 0, self.alpha_net)
 
     def forward(self, h, att_feats, p_att_feats, att_masks=None):
@@ -1389,7 +1398,10 @@ class Intergrate2vector(nn.Module):
             self.v2_pro = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
             self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
             # initialization
+            self.beta1 = ((self.rnn_size + self.att_hid_size) / (2 * self.rnn_size + float(self.att_hid_size))) ** 0.5
             model_utils.xavier_normal('tanh', self.v1_pro, self.v2_pro)
+            self.v1_pro.weight.data = self.v1_pro.weight*self.beta1
+            self.v2_pro.weight.data = self.v2_pro.weight * self.beta1
             model_utils.xavier_normal('sigmoid', self.alpha_net)
         elif self.inter_method == 'self_attention':
             self.v_pro = nn.Linear(self.rnn_size, self.att_hid_size)
@@ -1448,12 +1460,14 @@ class SentinalAttention(nn.Module):
             self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
             self.senti2att = nn.Linear(self.rnn_size, self.att_hid_size)
             # initialization
-            model_utils.xavier_uniform('tanh', self.h2att, self.senti2att)
+            self.beta1 = ((self.rnn_size + self.att_hid_size)/(2*self.rnn_size + float(self.att_hid_size)))**0.5
+            model_utils.xavier_normal('tanh', self.h2att, self.senti2att)
+            self.h2att.weight.data = self.h2att.weight*self.beta1
+            self.senti2att.weight.data = self.senti2att.weight * self.beta1
             model_utils.kaiming_normal('relu', 0, self.alpha_net)
         elif self.att_score_method == 'general':
             self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
             model_utils.kaiming_normal('relu', 0, self.general_att)
-            self.general_att.weight.data = self.general_att.weight/(self.rnn_size**0.5)
         elif self.att_score_method == 'cosine':
             self.cos = nn.CosineSimilarity(dim=2)
         elif self.att_score_method == 'scaled_dot':
@@ -1508,7 +1522,7 @@ class SentinalAttention(nn.Module):
         h = self.general_att(h)       # batch*1*rnn_size
         sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
-        return torch.bmm(h, sentinal).squeeze(1)       # batch * num_hidden
+        return torch.bmm(h, sentinal).squeeze(1)/(self.rnn_size**0.5)       # batch * num_hidden
 
     def cosine_att_score(self, h, sentinal):
         # sentinal's shape is batch * num_hidden * rnn_size
@@ -1543,9 +1557,17 @@ class IntraAttention(nn.Module):
         self.position_sentive_inter = opt.position_sentive_inter
         self.att_score_method = att_score_method
 
+        self.beta1 = ((self.rnn_size + self.att_hid_size) / (
+                    float(self.att_hid_size) + self.xt_dimension + 2 * self.rnn_size)) ** 0.5
+        self.beta2 = ((self.rnn_size + self.att_hid_size) / (
+                float(self.att_hid_size) + self.xt_dimension + self.rnn_size)) ** 0.5
+        self.beta3 = ((self.xt_dimension + self.att_hid_size) / (
+                float(self.att_hid_size) + self.xt_dimension + 2 * self.rnn_size)) ** 0.5
+        self.beta4 = ((self.xt_dimension + self.att_hid_size) / (
+                float(self.att_hid_size) + self.xt_dimension + self.rnn_size)) ** 0.5
+
         self.xt2att = nn.Linear(self.xt_dimension, self.att_hid_size)
         self.hl2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
-        self.hi2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
 
         if self.position_sentive_inter:
             self.hi2atts = nn.ModuleList([nn.Linear(self.rnn_size, self.att_hid_size, bias=True) for _ in range(16)])
@@ -1554,15 +1576,28 @@ class IntraAttention(nn.Module):
                     nonlinear = 'linear'
                 else:
                     nonlinear = 'tanh'
-                model_utils.xavier_uniform(nonlinear, self.hi2atts[i])
+                model_utils.xavier_normal(nonlinear, self.hi2atts[i])
+                if self.LSTMN_last_att_hidden:
+                    self.hi2atts[i].weight.data = self.hi2atts[i].weight * self.beta1
+                else:
+                    self.hi2atts[i].weight.data = self.hi2atts[i].weight * self.beta2
         else:
             self.hi2att = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
-            model_utils.xavier_uniform('tanh', self.hi2att)
+            model_utils.xavier_normal('tanh', self.hi2att)
+            if self.LSTMN_last_att_hidden:
+                self.hi2att.weight.data = self.hi2att.weight * self.beta1
+            else:
+                self.hi2att.weight.data = self.hi2att.weight * self.beta2
 
         self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
         # initialization
-        model_utils.xavier_uniform('tanh', self.xt2att, self.hl2att)
+        model_utils.xavier_normal('tanh', self.xt2att, self.hl2att)
         model_utils.kaiming_normal('relu', 0, self.alpha_net)
+        self.hl2att.weight.data = self.hl2att.weight * self.beta1
+        if self.LSTMN_last_att_hidden:
+            self.xt2att.weight.data = self.xt2att.weight * self.beta3
+        else:
+            self.xt2att.weight.data = self.xt2att.weight * self.beta4
 
         if not self.LSTMN_last_att_hidden:
             del self.hl2att
@@ -1570,14 +1605,13 @@ class IntraAttention(nn.Module):
         if self.word_sensitive_bias:
             self.word_bias_projection = nn.Sequential(nn.Linear(self.rnn_size, self.rnn_size, bias=False), nn.Tanh(),
                                                       nn.Linear(self.rnn_size, 1, bias=False))
-            model_utils.xavier_uniform('tanh', self.word_bias_projection[0], self.word_bias_projection[2])
+            model_utils.xavier_normal('tanh', self.word_bias_projection[0], self.word_bias_projection[2])
 
         if self.word_sensitive_coefficient:
             self.word_coefficient_projection = nn.Sequential(nn.Linear(self.rnn_size, self.rnn_size, bias=False),
                                                              nn.Tanh(),
                                                              nn.Linear(self.rnn_size, 1, bias=False))
-            model_utils.xavier_uniform('tanh', self.word_coefficient_projection[0], self.word_coefficient_projection[2])
-
+            model_utils.xavier_normal('tanh', self.word_coefficient_projection[0], self.word_coefficient_projection[2])
 
         if self.distance_sensitive_bias:
             if self.distance_bias_9_1:
@@ -1591,9 +1625,9 @@ class IntraAttention(nn.Module):
 
         if self.att_score_method == 'general':
             self.general_att = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
-            model_utils.xavier_normal('linear', self.general_att)
+            model_utils.kaiming_normal('relu', 0, self.general_att)
         elif self.att_score_method == 'scaled_dot':
-            self.scale = nn.Parameter(torch.Tensor([1.0]))
+            self.scale = nn.Parameter(torch.Tensor([float(self.rnn_size)**0.5]))
 
     def forward(self, xt, last_att_hl, hi, ci, xi):
         # xt, batch * input_encoding_size
@@ -1700,7 +1734,7 @@ class IntraAttention(nn.Module):
         h = self.general_att(h)       # batch*1*rnn_size
         sentinal = torch.transpose(sentinal, 1, 2)      # batch*rnn_size*num_hidden
 
-        return torch.bmm(h, sentinal).squeeze(1)       # batch * num_hidden
+        return torch.bmm(h, sentinal).squeeze(1)/(float(self.rnn_size)**0.5)       # batch * num_hidden
 
     def scaled_dot_att_score(self, h, sentinal):
         # sentinal's shape is batch * num_hidden * rnn_size
@@ -1720,7 +1754,7 @@ class O_SentinalAttention(SentinalAttention):
         self.senti2att = nn.Linear(opt.att_feat_size, self.att_hid_size)
 
         # initialization
-        model_utils.xavier_uniform('tanh', self.senti2att)
+        model_utils.xavier_normal('tanh', self.senti2att)
 
 
 class Att2in2Core(nn.Module):
@@ -1870,7 +1904,7 @@ class TopDownOriginalModel(AttModel):
         self.core = TopDownOriginalCore(opt)
 
         # initialization
-        model_utils.xavier_uniform('tanh', self.ctx2att)
+        model_utils.xavier_normal('tanh', self.ctx2att)
 
 
 class TopDownSentinalAffine2Model(AttModel):
