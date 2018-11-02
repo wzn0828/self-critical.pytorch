@@ -33,7 +33,7 @@ def add_summary_value(writer, key, value, iteration):
 
 def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
     # results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, sentinels = outputs
-    results, p_fc_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels, lang_weights = outputs
+    results, p_fc_feats, p_att_feats, att_hiddens, lan_hiddens, att_sentinels, lang_sentinels, lang_weights = outputs
     if opt.tensorboard_mid_variables:
         # add original fc_feats histogram
         tb_summary_writer.add_histogram('fc_feat', data['fc_feats'], iteration)
@@ -41,8 +41,8 @@ def variables_histogram(data, iteration, outputs, tb_summary_writer, opt):
         tb_summary_writer.add_histogram('att_feat', data['att_feats'], iteration)
         # add affined fc_feats histogram
         tb_summary_writer.add_histogram('p_fc_feat', p_fc_feats, iteration)
-        # # add affined att_feat histogram
-        # tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
+        # add affined att_feat histogram
+        tb_summary_writer.add_histogram('p_att_feat', p_att_feats, iteration)
 
         # add att_hiddens histogram
         for i in range(len(att_hiddens)):

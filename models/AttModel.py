@@ -237,7 +237,7 @@ class AttModel(CaptionModel):
 
         # return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
         #     sentinals)
-        return outputs, p_fc_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
+        return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
             att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
