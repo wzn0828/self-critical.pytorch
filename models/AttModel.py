@@ -101,7 +101,10 @@ class AttModel(CaptionModel):
                           range(opt.logit_layers - 1)]
             self.logit = nn.Sequential(
                 *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1)]))
-        self.ctx2att = nn.Linear(self.rnn_size, self.att_hid_size)
+
+        self.ctx2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) +
+                                       ((nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())
+                                       ))
 
         if self.tie_weights:
             if self.input_encoding_size != self.rnn_size:
@@ -121,9 +124,9 @@ class AttModel(CaptionModel):
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.2)
         model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
                                    filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
-        model_utils.xavier_normal('tanh', self.ctx2att)
+        model_utils.xavier_normal('tanh', self.ctx2att[0])
         self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
-        self.ctx2att.weight.data = self.ctx2att.weight*self.beta
+        self.ctx2att[0].weight.data = self.ctx2att[0].weight*self.beta
 
         if self.LSTMN and self.adaptive_t0:
             self.h1t0 = nn.Parameter(self.logit.weight.data.new_zeros((1, 1, self.rnn_size)))
@@ -165,7 +168,8 @@ class AttModel(CaptionModel):
         att_feats = pack_wrapper(self.att_embed, att_feats, att_masks)
 
         # Project the attention feats first to reduce memory and computation comsumptions.
-        p_att_feats = self.ctx2att(att_feats)
+        # p_att_feats = self.ctx2att(att_feats)
+        p_att_feats = pack_wrapper(self.ctx2att, att_feats, att_masks)
 
         att_masks_expand = att_masks.unsqueeze(2).expand_as(att_feats)
         att_feats_masked = att_feats * att_masks_expand
@@ -1293,13 +1297,14 @@ class Attention(nn.Module):
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
 
-        self.h2att = nn.Linear(self.rnn_size, self.att_hid_size)
+        self.h2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) + (
+            (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
         self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
 
         # initialization
         self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
-        model_utils.xavier_normal('tanh', self.h2att)
-        self.h2att.weight.data = self.h2att.weight*self.beta
+        model_utils.xavier_normal('tanh', self.h2att[0])
+        self.h2att[0].weight.data = self.h2att[0].weight*self.beta
         model_utils.kaiming_normal('relu', 0, self.alpha_net)
 
     def forward(self, h, att_feats, p_att_feats, att_masks=None):
@@ -1394,14 +1399,16 @@ class Intergrate2vector(nn.Module):
 
         self.inter_method = inter_method
         if self.inter_method == 'concat':
-            self.v1_pro = nn.Linear(self.rnn_size, self.att_hid_size)
-            self.v2_pro = nn.Linear(self.rnn_size, self.att_hid_size, bias=False)
+            self.v1_pro = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size, bias=False),) + (
+                (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
+            self.v2_pro = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size, bias=False),) + (
+                (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
             self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
             # initialization
             self.beta1 = ((self.rnn_size + self.att_hid_size) / (2 * self.rnn_size + float(self.att_hid_size))) ** 0.5
             model_utils.xavier_normal('tanh', self.v1_pro, self.v2_pro)
-            self.v1_pro.weight.data = self.v1_pro.weight*self.beta1
-            self.v2_pro.weight.data = self.v2_pro.weight * self.beta1
+            self.v1_pro[0].weight.data = self.v1_pro[0].weight*self.beta1
+            self.v2_pro[0].weight.data = self.v2_pro[0].weight * self.beta1
             model_utils.xavier_normal('sigmoid', self.alpha_net)
         elif self.inter_method == 'self_attention':
             self.v_pro = nn.Linear(self.rnn_size, self.att_hid_size)
