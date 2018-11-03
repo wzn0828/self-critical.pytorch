@@ -1403,7 +1403,10 @@ class Intergrate2vector(nn.Module):
                 (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
             self.v2_pro = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size, bias=False),) + (
                 (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
-            self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
+            if opt.Intergrate_ele_wise:
+                self.alpha_net = nn.Linear(self.att_hid_size, self.rnn_size, bias=True)
+            else:
+                self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
             # initialization
             self.beta1 = ((self.rnn_size + self.att_hid_size) / (2 * self.rnn_size + float(self.att_hid_size))) ** 0.5
             model_utils.xavier_normal('tanh', self.v1_pro[0], self.v2_pro[0])
@@ -1428,13 +1431,15 @@ class Intergrate2vector(nn.Module):
         # size of both is batch*rnn_size
 
         if self.inter_method == 'concat':
-            prob_v1 = self.concat_prob(v1, v2)              # batch * 1
+            prob_v1 = self.concat_prob(v1, v2)              # batch * 1 or batch * rnn_size
         elif 'self_attention' in self.inter_method:
             prob_v1 = self.self_attention_prob(v1, v2)      # batch * 1
 
         inter_v = prob_v1 * v1 + (1.0 - prob_v1) * v2
 
-        return inter_v, prob_v1     # batch*rnn_size, batch*1
+        prob_v1 = torch.mean(prob_v1, 1, True)              # batch * 1
+
+        return inter_v, prob_v1     # batch*rnn_size, batch*1 or batch * rnn_size
 
     def self_attention_prob(self, v1, v2):
         v1_score = self.alpha_1(F.tanh(self.v_pro(v1)))  # batch * 1
@@ -1448,10 +1453,10 @@ class Intergrate2vector(nn.Module):
         # size of both is batch * rnn_size
         p_v1 = self.v1_pro(v1)  # batch * att_hid_size
         p_v2 = self.v2_pro(v2)  # batch * att_hid_size
-        score = self.alpha_net(F.tanh(p_v1 + p_v2))  # batch * 1
-        prob = F.sigmoid(score)     # batch * 1
+        score = self.alpha_net(F.tanh(p_v1 + p_v2))  # batch * 1 or batch * rnn_size
+        prob = F.sigmoid(score)     # batch * 1 or batch * rnn_size
 
-        return prob                 # batch * 1
+        return prob                 # batch * 1 or batch * rnn_size
 
 
 class SentinalAttention(nn.Module):
