@@ -1406,7 +1406,7 @@ class Intergrate2vector(nn.Module):
             self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
             # initialization
             self.beta1 = ((self.rnn_size + self.att_hid_size) / (2 * self.rnn_size + float(self.att_hid_size))) ** 0.5
-            model_utils.xavier_normal('tanh', self.v1_pro, self.v2_pro)
+            model_utils.xavier_normal('tanh', self.v1_pro[0], self.v2_pro[0])
             self.v1_pro[0].weight.data = self.v1_pro[0].weight*self.beta1
             self.v2_pro[0].weight.data = self.v2_pro[0].weight * self.beta1
             model_utils.xavier_normal('sigmoid', self.alpha_net)
