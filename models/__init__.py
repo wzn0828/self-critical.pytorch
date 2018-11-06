@@ -47,9 +47,6 @@ def setup(opt):
     # original paper model
     elif opt.caption_model == 'topdown_original':
         model = TopDownOriginalModel(opt)
-    # Top-down-sentinal attention model s
-    elif opt.caption_model == 'topdown_sentinal_affine2':
-        model = TopDownSentinalAffine2Model(opt)
     # topdown_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_up_cat_weighted_hidden_3':
         model = TopDownUpCatWeightedHiddenModel_3(opt)
