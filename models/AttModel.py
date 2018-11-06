@@ -1757,17 +1757,6 @@ class IntraAttention(nn.Module):
 
 
 
-class O_SentinalAttention(SentinalAttention):
-    def __init__(self, opt):
-        super(O_SentinalAttention, self).__init__(opt)
-
-        # ----sentinal attention-----#
-        del self.senti2att
-        self.senti2att = nn.Linear(opt.att_feat_size, self.att_hid_size)
-
-        # initialization
-        model_utils.xavier_normal('tanh', self.senti2att)
-
 
 class Att2in2Core(nn.Module):
     def __init__(self, opt):
