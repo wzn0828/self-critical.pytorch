@@ -1659,25 +1659,25 @@ class NonLocalBlock(nn.Module):
         if self.inter_size is None:
             self.inter_size = in_size // 2
 
-        self.g = nn.Linear(self.rnn_size, self.inter_size)
-        self.theta =  nn.Linear(self.rnn_size, self.inter_size)
-        self.phi =  nn.Linear(self.rnn_size, self.inter_size)
+        self.g = nn.Linear(self.in_size, self.inter_size)
+        self.theta = nn.Linear(self.in_size, self.inter_size)
+        self.phi = nn.Linear(self.in_size, self.inter_size)
 
         if self.nonlocal_dy_bn:
             self.W = nn.Sequential(
-                nn.Linear(self.inter_size, self.rnn_size),
-                nn.BatchNorm1d(self.rnn_size)
+                nn.Linear(self.inter_size, self.in_size),
+                nn.BatchNorm1d(self.in_size)
             )
             model_utils.xavier_normal('linear', self.W[0])
             if opt.nonlocal_dy_insert:
-                nn.init.constant(self.W[1].weight, 0)
-                nn.init.constant(self.W[1].bias, 0)
+                nn.init.constant_(self.W[1].weight, 0)
+                nn.init.constant_(self.W[1].bias, 0)
         else:
-            self.W = nn.Linear(self.inter_size, self.rnn_size)
+            self.W = nn.Linear(self.inter_size, self.in_size)
             model_utils.xavier_normal('linear', self.W)
             if opt.nonlocal_dy_insert:
-                nn.init.constant(self.W.weight, 0)
-                nn.init.constant(self.W.bias, 0)
+                nn.init.constant_(self.W.weight, 0)
+                nn.init.constant_(self.W.bias, 0)
 
         # initialization
         model_utils.kaiming_normal('relu', 0, self.theta, self.phi)
@@ -1696,7 +1696,7 @@ class NonLocalBlock(nn.Module):
         theta_x = self.theta(x)                           # batch*(step+1)*inter_size
         theta_x = torch.transpose(theta_x, 1, 2)          # batch*inter_size*(step+1)
 
-        f = torch.bmm(phi_x, theta_x).squeeze(1) / (self.inter_size ** 0.5) # batch*(step+1)
+        f = torch.bmm(phi_x, theta_x).squeeze(1) / (self.inter_size ** 0.5)     # batch*(step+1)
 
         f_div_C = F.softmax(f, dim=1)   # batch * (step+1)
 
