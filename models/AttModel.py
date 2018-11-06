@@ -769,6 +769,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.Intergrate_instead = opt.Intergrate_instead
             self.lang_att_before_pro = opt.lang_att_before_pro
 
+        # dynamically nonlocal
+        self.nonlocal_dy = opt.nonlocal_dy
+        if self.nonlocal_dy:
+            self.dy_nonlocal = NonLocalBlock(opt, self.rnn_size)
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
@@ -883,6 +888,14 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             else:
                 lang_weights = torch.zeros_like(h2)
 
+        # ---non-local--- #
+        if self.nonlocal_dy:
+            x = affined.unsqueeze(1)                            # batch*1*rnn_size
+            if self.LSTMN and step > 0:
+                x = torch.cat([xi, x], 1)                        # batch*(step+1)*rnn_size
+            affined, lang_weights = self.dy_nonlocal(x)         # batch * rnn_size, batch * (step+1)
+        # ---non-local--- #
+
         output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
         # --end-------generate output--------#
 
@@ -897,7 +910,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                         torch.stack([h_att, c_att, h_lang, c_lang, p_h_lang]),)
             else:
                 state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
-                torch.stack([h_att, c_att, h_lang, c_lang, xt]),)
+                torch.stack([h_att, c_att, h_lang, c_lang, affined]),)
         else:
             if self.transfer_horizontal:
                 state = (torch.stack([h_att, affined]), torch.stack([c_att, c_lang]))
@@ -1270,8 +1283,6 @@ class Attention(nn.Module):
         return att_res
 
 
-
-
 class Intergrate2vector(nn.Module):
     def __init__(self, opt, inter_method):
         super(Intergrate2vector, self).__init__()
@@ -1637,6 +1648,65 @@ class IntraAttention(nn.Module):
         return torch.bmm(h, sentinal).squeeze(1)/self.scale      # batch * num_hidden
 
 
+class NonLocalBlock(nn.Module):
+    def __init__(self, opt, in_size, inter_size=None):
+        super(NonLocalBlock, self).__init__()
+
+        self.in_size = in_size
+        self.inter_size = inter_size
+        self.nonlocal_dy_bn = opt.nonlocal_dy_bn
+
+        if self.inter_size is None:
+            self.inter_size = in_size // 2
+
+        self.g = nn.Linear(self.rnn_size, self.inter_size)
+        self.theta =  nn.Linear(self.rnn_size, self.inter_size)
+        self.phi =  nn.Linear(self.rnn_size, self.inter_size)
+
+        if self.nonlocal_dy_bn:
+            self.W = nn.Sequential(
+                nn.Linear(self.inter_size, self.rnn_size),
+                nn.BatchNorm1d(self.rnn_size)
+            )
+            model_utils.xavier_normal('linear', self.W[0])
+            if opt.nonlocal_dy_insert:
+                nn.init.constant(self.W[1].weight, 0)
+                nn.init.constant(self.W[1].bias, 0)
+        else:
+            self.W = nn.Linear(self.inter_size, self.rnn_size)
+            model_utils.xavier_normal('linear', self.W)
+            if opt.nonlocal_dy_insert:
+                nn.init.constant(self.W.weight, 0)
+                nn.init.constant(self.W.bias, 0)
+
+        # initialization
+        model_utils.kaiming_normal('relu', 0, self.theta, self.phi)
+        model_utils.xavier_normal('linear', self.g)
+
+    def forward(self, x):
+        '''
+        :param x: (batch, (step+1), rnn_size)
+        :return:
+        '''
+
+        g_x = self.g(x)                                   # batch*(step+1)*inter_size
+
+        phi_x = self.phi(x[:, -1, :]).unsqueeze(1)  # batch*1*inter_size
+
+        theta_x = self.theta(x)                           # batch*(step+1)*inter_size
+        theta_x = torch.transpose(theta_x, 1, 2)          # batch*inter_size*(step+1)
+
+        f = torch.bmm(phi_x, theta_x).squeeze(1) / (self.inter_size ** 0.5) # batch*(step+1)
+
+        f_div_C = F.softmax(f, dim=1)   # batch * (step+1)
+
+        f_div_C = f_div_C.unsqueeze(1)  # batch * 1 * (step+1)
+        y = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
+
+        W_y = self.W(y)             # batch * rnn_size
+        z = W_y + x[:, -1, :]
+
+        return z, f_div_C.squeeze(1)  # batch * rnn_size, batch * (step+1)
 
 
 class Att2in2Core(nn.Module):
