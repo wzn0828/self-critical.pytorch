@@ -649,12 +649,18 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.norm_input = opt.norm_input
         self.norm_output = opt.norm_output
         self.norm_hidden = opt.norm_hidden
+        self.noh2pre = opt.noh2pre
+
+        if self.noh2pre:
+            inputsize = opt.input_encoding_size + opt.rnn_size
+        else:
+            inputsize = opt.input_encoding_size + opt.rnn_size * 2
 
         if self.lstm_layer_norm:
-            self.att_lstm = model_utils.LayerNormLSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
+            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
             self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size * 2, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
         else:
-            self.att_lstm = nn.LSTMCell(opt.input_encoding_size + opt.rnn_size * 2, opt.rnn_size)  # we, fc, h^2_t-1
+            self.att_lstm = nn.LSTMCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
             self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
 
         if self.LSTMN:
@@ -751,8 +757,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.h1_affine = lambda x: x
 
         if self.attention_gate:
-            self.att_gate_1 = nn.Linear(3 * opt.rnn_size + opt.input_encoding_size,
-                                             2 * opt.rnn_size + opt.input_encoding_size)
+            self.att_gate_1 = nn.Linear(opt.rnn_size + inputsize,
+                                             inputsize)
             self.att_gate_2 = nn.Linear(3 * opt.rnn_size, 2 * opt.rnn_size)
 
             init.orthogonal_(self.att_gate_1.weight)
@@ -788,7 +794,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             c2 = state[1][1]
 
         prev_h = F.dropout(h2, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
-        att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
+        if self.noh2pre:
+            att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
+        else:
+            att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
             if step < 2 or not self.LSTMN_att:
