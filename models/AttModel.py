@@ -650,6 +650,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.norm_output = opt.norm_output
         self.norm_hidden = opt.norm_hidden
         self.noh2pre = opt.noh2pre
+        self.pre = opt.pre
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.rnn_size
@@ -789,14 +790,19 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --start-------first LSTM--------#
         if self.LSTMN:
             h2 = state[-1][2]
+            c2 = state[-1][3]
         else:
             h2 = state[0][1]
             c2 = state[1][1]
 
-        prev_h = F.dropout(h2, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
         if self.noh2pre:
             att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
         else:
+            if self.pre == 'h':
+                pre = h2
+            elif self.pre == 'c':
+                pre = c2
+            prev_h = F.dropout(pre, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
             att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
