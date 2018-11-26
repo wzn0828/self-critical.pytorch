@@ -68,6 +68,7 @@ class AttModel(CaptionModel):
         self.adaptive_t0 = opt.adaptive_t0
         self.LN_out_embedding = opt.LN_out_embedding
         self.print_lang_weights = opt.print_lang_weights
+        self.input_feature = opt.input_feature
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -138,6 +139,11 @@ class AttModel(CaptionModel):
             nn.init.normal_(self.h2t0, mean=0, std=0.1)
             nn.init.normal_(self.c2t0, mean=0, std=0.1)
 
+        self.ctx2att0 = nn.Linear(self.rnn_size, self.att_hid_size)
+        self.ctx2att2 = nn.Linear(self.rnn_size, self.att_hid_size)
+        model_utils.xavier_normal('linear', self.ctx2att0, self.ctx2att2)
+
+
     def init_hidden(self, bsz):
         weight = next(self.parameters())
         if self.LSTMN:
@@ -170,6 +176,8 @@ class AttModel(CaptionModel):
         # Project the attention feats first to reduce memory and computation comsumptions.
         # p_att_feats = self.ctx2att(att_feats)
         p_att_feats = pack_wrapper(self.ctx2att, att_feats, att_masks)
+        p0_att_feats = self.ctx2att0(att_feats)
+        p2_att_feats = self.ctx2att2(att_feats)
 
         att_masks_expand = att_masks.unsqueeze(2).expand_as(att_feats)
         att_feats_masked = att_feats * att_masks_expand
@@ -177,7 +185,7 @@ class AttModel(CaptionModel):
         lens = lens.unsqueeze(1).expand(lens.size(0), att_feats.size(-1))
         average_att_feat = att_feats_masked.sum(1) / lens.data.float()  # batch*rnn_size
 
-        return fc_feats, att_feats, p_att_feats, att_masks, average_att_feat
+        return fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, p0_att_feats, p2_att_feats
 
     def _forward(self, fc_feats, att_feats, seq, att_masks=None):
         '''
@@ -198,9 +206,13 @@ class AttModel(CaptionModel):
         lang_weights = []
 
         # Prepare the features
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats,
-                                                                                                     att_feats,
-                                                                                                     att_masks)  # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat, p0_att_feats, p2_att_feats = self._prepare_feature(
+            fc_feats,
+            att_feats,
+            att_masks)  # p_fc_feats [batch_size, rnn_size], p_att_feats [batch_size, 36, rnn_size], pp_att_feats [batch_size, 36, att_hid_size]
+        if self.input_feature == 'att_mean':
+            p_fc_feats = average_att_feat
+
         # pp_att_feats is used for attention, we cache it in advance to reduce computation cost
 
         for i in range(seq.size(1) - 1):
@@ -223,7 +235,7 @@ class AttModel(CaptionModel):
             if i >= 1 and seq[:, i].sum() == 0:
                 break
 
-            output, state, lang_weight = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,
+            output, state, lang_weight = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p0_att_feats, p2_att_feats, p_att_masks,
                                                     average_att_feat, state)  # batch*(vocab_size+1)
             outputs[:, i] = output
 
@@ -244,7 +256,7 @@ class AttModel(CaptionModel):
         return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
             att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights)
 
-    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, att_masks, average_att_feat, state):
+    def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, att_masks, average_att_feat, state):
         # layer normal output embedding matrix
         if self.LN_out_embedding:
             self.logit.weight.data = self.ln_out_embedding(self.logit.weight)
@@ -252,7 +264,7 @@ class AttModel(CaptionModel):
         # 'it' contains a word index
         xt = self.embed(it)  # [batch_size, input_encoding_size]
 
-        output, state, lang_weights = self.core(xt, fc_feats, att_feats, p_att_feats, state, att_masks)  # batch*rn_size
+        output, state, lang_weights = self.core(xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks)  # batch*rn_size
         logprobs = F.log_softmax(self.logit(output), dim=1)  # batch*(vocab_size+1)
 
         return logprobs, state, lang_weights
@@ -261,9 +273,10 @@ class AttModel(CaptionModel):
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
 
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats,
-                                                                                                     att_feats,
-                                                                                                     att_masks)
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat, p0_att_feats, p2_att_feats = self._prepare_feature(
+            fc_feats,
+            att_feats,
+            att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
         seq = torch.LongTensor(self.seq_length, batch_size).zero_()
@@ -277,6 +290,8 @@ class AttModel(CaptionModel):
             tmp_fc_feats = p_fc_feats[k:k + 1].expand(beam_size, p_fc_feats.size(1))
             tmp_att_feats = p_att_feats[k:k + 1].expand(*((beam_size,) + p_att_feats.size()[1:])).contiguous()
             tmp_p_att_feats = pp_att_feats[k:k + 1].expand(*((beam_size,) + pp_att_feats.size()[1:])).contiguous()
+            tmp_p0_att_feats = p0_att_feats[k:k + 1].expand(*((beam_size,) + p0_att_feats.size()[1:])).contiguous()
+            tmp_p2_att_feats = p2_att_feats[k:k + 1].expand(*((beam_size,) + p2_att_feats.size()[1:])).contiguous()
             tmp_att_masks = p_att_masks[k:k + 1].expand(
                 *((beam_size,) + p_att_masks.size()[1:])).contiguous() if att_masks is not None else None
             tmp_average_att_feat = average_att_feat[k:k + 1].expand(beam_size, average_att_feat.size(1))
@@ -285,11 +300,14 @@ class AttModel(CaptionModel):
                 if t == 0:  # input <bos>
                     it = fc_feats.new_zeros([beam_size], dtype=torch.long)
 
-                logprobs, state, lang_weights = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
-                                                          tmp_att_masks, tmp_average_att_feat, state)
+                logprobs, state, lang_weights = self.get_logprobs_state(it, tmp_fc_feats, tmp_att_feats,
+                                                                        tmp_p_att_feats, tmp_p0_att_feats,
+                                                                        tmp_p2_att_feats,
+                                                                        tmp_att_masks, tmp_average_att_feat, state)
 
             self.done_beams[k], states = self.beam_search(state, logprobs, tmp_fc_feats, tmp_att_feats, tmp_p_att_feats,
-                                                  tmp_att_masks, tmp_average_att_feat, opt=opt)
+                                                          tmp_p0_att_feats, tmp_p2_att_feats,
+                                                          tmp_att_masks, tmp_average_att_feat, opt=opt)
             self.states[k] = [state[:, 0, :] for state in states[0][1:]]
             seq[:, k] = self.done_beams[k][0]['seq']  # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
@@ -319,8 +337,9 @@ class AttModel(CaptionModel):
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)  # (2*batch*rnn_size, 2*batch*rnn_size)
 
-        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat = self._prepare_feature(fc_feats, att_feats,
-                                                                                   att_masks)  # batch*rnn_size, batch*36*rnn_size, batch*36*att_hid_size
+        p_fc_feats, p_att_feats, pp_att_feats, p_att_masks, average_att_feat, p0_att_feats, p2_att_feats = self._prepare_feature(
+            fc_feats, att_feats,
+            att_masks)  # batch*rnn_size, batch*36*rnn_size, batch*36*att_hid_size
 
         seq = fc_feats.new_zeros((batch_size, self.seq_length), dtype=torch.long)  # batch*16
         seqLogprobs = fc_feats.new_zeros(batch_size, self.seq_length)  # batch*16
@@ -328,7 +347,7 @@ class AttModel(CaptionModel):
             if t == 0:  # input <bos>
                 it = fc_feats.new_zeros(batch_size, dtype=torch.long)
 
-            logprobs, state, lang_weights = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p_att_masks,average_att_feat,
+            logprobs, state, lang_weights = self.get_logprobs_state(it, p_fc_feats, p_att_feats, pp_att_feats, p0_att_feats, p2_att_feats, p_att_masks, average_att_feat,
                                                       state)  # batch*(vocab_size+1), (2*batch*rnn_size, 2*batch*rnn_size)
 
             if self.print_lang_weights:
@@ -651,6 +670,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.norm_hidden = opt.norm_hidden
         self.noh2pre = opt.noh2pre
         self.pre = opt.pre
+        self.input_feature = opt.input_feature
+        self.output_attention = opt.output_attention
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.rnn_size
@@ -781,7 +802,15 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         if self.nonlocal_dy:
             self.dy_nonlocal = NonLocalBlock(opt, self.rnn_size)
 
-    def forward(self, xt, fc_feats, att_feats, p_att_feats, state, att_masks=None):
+        if self.input_feature == 'attention':
+            self.attention0 = Attention(opt)
+
+        if self.output_attention:
+            self.attention2 = Attention(opt)
+            self.outatt_affine = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
+            model_utils.xavier_normal('linear', self.outatt_affine)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
         if self.LSTMN and step > 0:
@@ -789,11 +818,16 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # --start-------first LSTM--------#
         if self.LSTMN:
+            h1 = state[-1][0]
             h2 = state[-1][2]
             c2 = state[-1][3]
         else:
+            h1 = state[0][0]
             h2 = state[0][1]
             c2 = state[1][1]
+
+        if self.input_feature == 'attention':
+            fc_feats = self.attention0(h1, att_feats, p0_att_feats, att_masks)  # batch_size * rnn_size
 
         if self.noh2pre:
             att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
@@ -878,9 +912,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                     lang_weights = torch.zeros_like(h2)
 
                 if self.lang_att_before_pro:
-                    affined = self.tgh(self.h2_affine(self.drop(inter_v)))
+                    affined_linear = self.h2_affine(self.drop(inter_v))
                 else:
-                    affined = self.tgh(inter_v)  # batch*rnn_size
+                    affined_linear = inter_v  # batch*rnn_size
 
             else:
                 pre_sentinal = state[2:]
@@ -888,20 +922,25 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 sentinal = torch.cat([_[0].unsqueeze(1) for _ in pre_sentinal],
                                      1)  # [batch_size, num_recurrent, rnn_size]
                 weighted_sentinal, lang_weights = self.sen_attention(h_lang, sentinal)  # batch_size * rnn_size
-                affined = self.tgh(
-                    self.h2_affine(self.drop(h_lang)) + self.ws_affine(
-                        self.drop(weighted_sentinal)))  # batch_size * rnn_size
+                affined_linear = self.h2_affine(self.drop(h_lang)) + self.ws_affine(
+                        self.drop(weighted_sentinal))  # batch_size * rnn_size
         else:
             if self.add_2_layer_hidden:
-                affined = self.tgh(self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att)))
+                affined_linear = self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att))
             elif self.directly_add_2_layer:
-                affined = self.tgh(self.h2_affine(self.drop((h_lang + h_att)/1.4142)))
+                affined_linear = self.h2_affine(self.drop((h_lang + h_att)/1.4142))
             else:
-                affined = self.tgh(self.h2_affine(self.drop(h_lang)))
+                affined_linear = self.h2_affine(self.drop(h_lang))
             if self.LSTMN:
                 lang_weights = (layer1_weights + layer2_weights)/2.0
             else:
                 lang_weights = torch.zeros_like(h2)
+
+        if self.output_attention:
+            att_output = self.attention2(h_lang, att_feats, p2_att_feats, att_masks)  # batch_size * rnn_size
+            affined_linear += self.outatt_affine(self.drop(att_output))
+
+        affined = self.tgh(affined_linear)
 
         # ---non-local--- #
         if self.nonlocal_dy:
