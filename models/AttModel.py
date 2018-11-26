@@ -25,6 +25,7 @@ import misc.utils as utils
 from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
 from models import model_utils
 from .CaptionModel import CaptionModel
+import random
 
 
 def sort_pack_padded_sequence(input, lengths):
@@ -647,6 +648,7 @@ class TopDownOriginalCore(TopDownCore):
 class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownUpCatWeightedHiddenCore3, self).__init__()
+        self.iteration = 0
         self.drop_prob_lm = opt.drop_prob_lm
         self.drop_prob_rnn = opt.drop_prob_rnn
         self.drop_prob_output = opt.drop_prob_output
@@ -826,8 +828,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             h2 = state[0][1]
             c2 = state[1][1]
 
+        att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)
+        weight0 = att_masks.view(-1, att_size).float()
+        weight0 = weight0 / weight0.sum(1, keepdim=True)  # normalize to 1
         if self.input_feature == 'attention':
-            fc_feats = self.attention0(h1, att_feats, p0_att_feats, att_masks)  # batch_size * rnn_size
+            fc_feats, weight0 = self.attention0(h1, att_feats, p0_att_feats, att_masks)  # batch_size * rnn_size
 
         if self.noh2pre:
             att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
@@ -867,7 +872,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --end-------first LSTM-------- #
 
         # --start-------second LSTM-------- #
-        att = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
+        att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
         droped_h_att = F.dropout(h_att, self.drop_prob_rnn, self.training)
         lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
@@ -937,7 +942,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 lang_weights = torch.zeros_like(h2)
 
         if self.output_attention:
-            att_output = self.attention2(h_lang, att_feats, p2_att_feats, att_masks)  # batch_size * rnn_size
+            att_output, weight2 = self.attention2(h_lang, att_feats, p2_att_feats, att_masks)  # batch_size * rnn_size
             affined_linear += self.outatt_affine(self.drop(att_output))
 
         affined = self.tgh(affined_linear)
@@ -976,6 +981,28 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
                 state = state + tuple(pre_sentinal) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
         # --end-------generate state--------#
+
+        # visualization
+        if step == 6:
+            self.iteration += 1
+            if self.iteration > 10 and self.iteration % 100 == 0:
+                batch_size = att_feats.size(0)
+                if self.input_feature == 'attention':
+                    print('The attention distribution of the input attention:')
+                    random.seed(123)
+                    for i in random.sample(range(batch_size), 3):
+                        print(weight0[i][att_masks[i] != 0])
+
+                print('The attention distribution of the first LSTM attention:')
+                random.seed(123)
+                for i in random.sample(range(batch_size), 3):
+                    print(weight[i][att_masks[i] != 0])
+
+                if self.output_attention:
+                    print('The attention distribution of the output attention:')
+                    random.seed(123)
+                    for i in random.sample(range(batch_size), 3):
+                        print(weight2[i][att_masks[i] != 0])
 
         return output, state, lang_weights
 
@@ -1334,7 +1361,7 @@ class Attention(nn.Module):
         att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1))  # batch * att_size * rnn_size
         att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1)  # batch * rnn_size
 
-        return att_res
+        return att_res, weight
 
 
 class Intergrate2vector(nn.Module):
