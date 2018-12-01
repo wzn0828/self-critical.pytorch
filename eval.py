@@ -93,23 +93,38 @@ opt = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 opt.dump_images = 0
 opt.num_images = -1
-opt.model = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/model-best.pth'
-opt.infos_path = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0/infos_BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-B32-Dlm_0.3-Drnn_0-Datt_0-best.pkl'
+opt.model = 'Experiments/Visualized/BUTD-XE_Noh2pre/model.pth'
+opt.infos_path = 'Experiments/Visualized/BUTD-XE_Noh2pre/infos_BUTD-XE_Noh2pre.pkl'
 opt.language_eval = 1
-opt.beam_size = 5
-opt.batch_size = 1200
+opt.beam_size = 1
+opt.batch_size = 64
 
-opt.weighted_hidden = True
+opt.input_feature = 'fc'
+opt.pre = 'h'
+opt.output_attention = False
+opt.save_att_statics = True
 
-opt.testOrnot = True
-opt.split = None
-# opt.split = 'raw_val'
-opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_fc'
-opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
-# opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
-# opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+opt.att_statics_numfeat_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/train_att_statics_numboxes.npy'
+opt.att_statics_weights_l2_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/train_att_statics_l2weight_e3.npy'
 
-# ----- for my local set ----- #
+opt.dim_att_statics_numfeat_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/dim_train_att_statics_numboxes.npy'
+opt.dim_att_statics_weights_l2_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/dim_train_att_statics_l2weight_e3.npy'
+
+opt.specified_id=[]
+opt.dataset='coco'
+opt.annfile = '/home/wzn/PycharmProjects/self-critical.pytorch/coco-caption/annotations/captions_val2014.json'
+opt.input_json = 'data/MSCOCO/cocotalk.json'
+opt.input_label_h5 = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/cocotalk_label.h5'
+opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
+opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+
+# opt.print_lang_weights = True
+opt.testOrnot = False
+
+# opt.specified_id = [88652, 46775]
+opt.split = 'train'   # 'specified'
+
+cache_path = os.path.join('vis', str(opt.num_images))
 
 # Load infos
 with open(opt.infos_path) as f:
@@ -117,7 +132,7 @@ with open(opt.infos_path) as f:
 
 # ----- for my local set ----- #
 opt.input_box_dir = infos['opt'].input_box_dir
-opt.input_label_h5 = infos['opt'].input_label_h5
+# opt.input_label_h5 = infos['opt'].input_label_h5
 # ----- for my local set ----- #
 
 
@@ -133,7 +148,7 @@ if opt.batch_size == 0:
     opt.batch_size = infos['opt'].batch_size
 if len(opt.id) == 0:
     opt.id = infos['opt'].id
-ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval", "input_fc_dir", "input_att_dir"]
+ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval", 'input_label_h5',"input_fc_dir", "input_att_dir", "input_json",'input_box_dir']
 for k in vars(infos['opt']).keys():
     if k not in ignore:
         if k in vars(opt):
@@ -172,8 +187,18 @@ loss, split_predictions, lang_stats = eval_utils.eval_split(model, crit, loader,
     vars(opt))
 
 if opt.save_att_statics:
-    json.dump(model.core.att_statics_numfeat, open(opt.att_statics_numfeat_path, 'w'))
-    json.dump(model.core.att_statics_weights_l2, open(opt.att_statics_weights_l2_path, 'w'))
+    # json.dump(model.core.att_statics_numfeat, open(opt.att_statics_numfeat_path, 'w'))
+    # json.dump(model.core.att_statics_weights_l2, open(opt.att_statics_weights_l2_path, 'w'))
+
+    np.save(model.core.att_statics_numfeat_path, model.core.att_statics_numfeat)
+    np.save(model.core.att_statics_weights_l2_path, model.core.att_statics_weights_l2)
+
+    # json.dump(model.core.dim_att_statics_numboxes, open(opt.dim_att_statics_numfeat_path, 'w'))
+    # json.dump(model.core.dim_att_statics_l2weight, open(opt.dim_att_statics_weights_l2_path, 'w'))
+
+    np.save(model.core.dim_att_statics_numfeat_path, model.core.dim_att_statics_numboxes)
+    np.save(model.core.dim_att_statics_weights_l2_path, model.core.dim_att_statics_l2weight)
+
 
 print('loss: ', loss)
 if lang_stats:
