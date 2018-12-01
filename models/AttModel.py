@@ -60,7 +60,7 @@ class AttModel(CaptionModel):
         # self.rnn_type = opt.rnn_type
         self.rnn_size = opt.rnn_size
         self.num_layers = opt.num_layers
-        self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_feat = opt.drop_prob_feat
         self.drop_prob_embed = opt.drop_prob_embed
         self.seq_length = opt.seq_length
         self.fc_feat_size = opt.fc_feat_size
@@ -87,14 +87,14 @@ class AttModel(CaptionModel):
                 (nn.Linear(self.fc_feat_size, self.rnn_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if opt.fc_use_bn == 2 else ()) +
-                (nn.Dropout(self.drop_prob_lm),)))
+                (nn.Dropout(self.drop_prob_feat),)))
 
         self.att_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
                 (nn.Linear(self.att_feat_size, self.rnn_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
-                (nn.Dropout(self.drop_prob_lm),)))
+                (nn.Dropout(self.drop_prob_feat),)))
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
@@ -668,8 +668,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownUpCatWeightedHiddenCore3, self).__init__()
         self.iteration = 0
-        self.drop_prob_lm = opt.drop_prob_lm
-        self.drop_prob_rnn = opt.drop_prob_rnn
+        self.drop_prob_rnn1 = opt.drop_prob_rnn1
+        self.drop_prob_rnn2 = opt.drop_prob_rnn2
         self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
         self.input_encoding_size = opt.input_encoding_size
@@ -735,7 +735,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.drop = nn.Dropout(self.drop_prob_output)
+        self.drop = nn.Dropout(self.drop_prob_rnn2)
 
         if opt.nonlinear == 'relu':
             self.tgh = nn.ReLU()
@@ -871,7 +871,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 pre = h2
             elif self.pre == 'c':
                 pre = c2
-            prev_h = F.dropout(pre, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
+            prev_h = F.dropout(pre, self.drop_prob_rnn1, self.training)  # [batch_size, rnn_size]
             att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
@@ -904,7 +904,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --start-------second LSTM-------- #
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
-        droped_h_att = F.dropout(h_att, self.drop_prob_rnn, self.training)
+        droped_h_att = F.dropout(h_att, self.drop_prob_rnn1, self.training)
         lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
@@ -985,7 +985,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             affined, lang_weights = self.dy_nonlocal(x)         # batch * rnn_size, batch * (step+1)
         # ---non-local--- #
 
-        output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
+        output = F.dropout(affined, self.drop_prob_output, self.training)  # batch_size * rnn_size
         # --end-------generate output--------#
 
         # --start-------generate state--------#
@@ -1107,8 +1107,8 @@ class TestCore(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TestCore, self).__init__()
         self.iteration = 0
-        self.drop_prob_lm = opt.drop_prob_lm
-        self.drop_prob_rnn = opt.drop_prob_rnn
+        self.drop_prob_rnn1 = opt.drop_prob_rnn1
+        self.drop_prob_rnn2 = opt.drop_prob_rnn2
         self.drop_prob_output = opt.drop_prob_output
         self.rnn_size = opt.rnn_size
         self.input_encoding_size = opt.input_encoding_size
@@ -1171,7 +1171,7 @@ class TestCore(nn.Module):
         # output
         self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
         self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.drop = nn.Dropout(self.drop_prob_output)
+        self.drop = nn.Dropout(self.drop_prob_rnn2)
 
         if opt.nonlinear == 'relu':
             self.tgh = nn.ReLU()
@@ -1298,7 +1298,7 @@ class TestCore(nn.Module):
                 pre = h2
             elif self.pre == 'c':
                 pre = c2
-            prev_h = F.dropout(pre, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
+            prev_h = F.dropout(pre, self.drop_prob_rnn1, self.training)  # [batch_size, rnn_size]
             att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
@@ -1336,7 +1336,7 @@ class TestCore(nn.Module):
         # --start-------second LSTM-------- #
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
 
-        droped_h_att = F.dropout(h_att, self.drop_prob_rnn, self.training)
+        droped_h_att = F.dropout(h_att, self.drop_prob_rnn1, self.training)
         lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
@@ -1385,7 +1385,7 @@ class TestCore(nn.Module):
 
         affined = self.tgh(affined_linear)
 
-        output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
+        output = F.dropout(affined, self.drop_prob_output, self.training)  # batch_size * rnn_size
         # --end-------generate output--------#
 
         # --start-------generate state--------#
