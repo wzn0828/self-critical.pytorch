@@ -60,6 +60,7 @@ class AttModel(CaptionModel):
         # self.rnn_type = opt.rnn_type
         self.rnn_size = opt.rnn_size
         self.num_layers = opt.num_layers
+        self.drop_attfeat_location = opt.drop_attfeat_location
         self.drop_prob_attfeat = opt.drop_prob_attfeat
         self.drop_prob_fcfeat = opt.drop_prob_fcfeat
         self.drop_prob_embed = opt.drop_prob_embed
@@ -95,7 +96,7 @@ class AttModel(CaptionModel):
                 (nn.Linear(self.att_feat_size, self.rnn_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
-                (nn.Dropout(self.drop_prob_attfeat),)))
+                ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
@@ -669,6 +670,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def __init__(self, opt, use_maxout=False):
         super(TopDownUpCatWeightedHiddenCore3, self).__init__()
         self.iteration = 0
+        self.drop_prob_attfeat = opt.drop_prob_attfeat
+        self.drop_attfeat_location = opt.drop_attfeat_location
         self.drop_prob_rnn1 = opt.drop_prob_rnn1
         self.drop_prob_rnn2 = opt.drop_prob_rnn2
         self.drop_prob_output = opt.drop_prob_output
@@ -722,7 +725,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 input_second_att_size = 2*self.rnn_size
             self.intra_att_lang_lstm = IntraAttention(opt, input_second_att_size, opt.LSTMN_lang_att_score_method)
 
+        ### --- visual attention --- ###
         self.attention = Attention(opt)
+
         if opt.weighted_hidden:
             self.sen_attention = SentinalAttention(opt)
         else:
@@ -904,6 +909,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # --start-------second LSTM-------- #
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
+        if self.drop_attfeat_location == 'after_attention':
+            att = F.dropout(att, self.drop_prob_attfeat, self.training)
 
         droped_h_att = F.dropout(h_att, self.drop_prob_rnn1, self.training)
         lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
