@@ -171,6 +171,10 @@ assert opt.annfile is not None and len(opt.annfile) > 0
 loss, split_predictions, lang_stats = eval_utils.eval_split(model, crit, loader,
     vars(opt))
 
+if opt.save_att_statics:
+    json.dump(model.core.att_statics_numfeat, open(opt.att_statics_numfeat_path, 'w'))
+    json.dump(model.core.att_statics_weights_l2, open(opt.att_statics_weights_l2_path, 'w'))
+
 print('loss: ', loss)
 if lang_stats:
   print(lang_stats)

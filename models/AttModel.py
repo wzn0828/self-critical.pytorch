@@ -26,6 +26,7 @@ from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_
 from models import model_utils
 from .CaptionModel import CaptionModel
 import random
+import json
 
 
 def sort_pack_padded_sequence(input, lengths):
@@ -812,13 +813,20 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.outatt_affine = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
             model_utils.xavier_normal('linear', self.outatt_affine)
 
+        self.save_att_statics = opt.save_att_statics
+        if opt.save_att_statics:
+            self.att_statics_numfeat_path = opt.att_statics_numfeat_path
+            self.att_statics_weights_l2_path = opt.att_statics_weights_l2_path
+            self.att_statics_numfeat = {}
+            self.att_statics_weights_l2 = {}
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
         if self.LSTMN and step > 0:
             xi = torch.cat([_[4].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
 
-        # --start-------first LSTM--------#
+        # --start-------first LSTM-------- #
         if self.LSTMN:
             h1 = state[-1][0]
             h2 = state[-1][2]
@@ -1004,7 +1012,43 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                     for i in random.sample(range(batch_size), 3):
                         print(weight2[i][att_masks[i] != 0])
 
+            # ---generate a variance statics dictionary--- #
+            if self.save_att_statics:
+                batch_size = att_feats.size(0)
+                num_feats = att_masks.sum(dim=1).int()
+                for i in range(batch_size):
+                    num_feat = num_feats[i].item()
+                    l2_weight = weight[i][:num_feats[i]].norm().item()
+                    l2_weight = int(l2_weight * 1e4 + 0.5)
+
+                    att_std = att[i].std().item()
+                    att_mean = att[i].mean().item()
+                    feat_std = att_feats[i][:num_feats[i], :].std(dim=1).mean().item()
+                    feat_mean = att_feats[i][:num_feats[i], :].mean(dim=1).mean().item()
+
+                    self.generate_dict(num_feat, self.att_statics_numfeat, att_mean, att_std, feat_mean, feat_std)
+                    self.generate_dict(l2_weight, self.att_statics_weights_l2, att_mean, att_std, feat_mean, feat_std)
+
+                if self.iteration % 100 == 0:
+                    json.dump(self.att_statics_numfeat, open(self.att_statics_numfeat_path, 'w'))
+                    json.dump(self.att_statics_weights_l2, open(self.att_statics_weights_l2, 'w'))
+            # ---generate a variance statics dictionary--- #
+
+        # visualization
+
         return output, state, lang_weights
+
+    def generate_dict(self, key, dict, att_mean, att_std, feat_mean, feat_std):
+        value_dict = dict.get(key,
+                              {'att_std': 0, 'att_mean': 0, 'feat_std': 0,
+                               'feat_mean': 0,
+                               'num': 0})
+        value_dict['num'] += 1
+        value_dict['att_std'] += 1.0 / value_dict['num'] * (att_std - value_dict['att_std'])
+        value_dict['att_mean'] += 1.0 / value_dict['num'] * (att_mean - value_dict['att_mean'])
+        value_dict['feat_std'] += 1.0 / value_dict['num'] * (feat_std - value_dict['feat_std'])
+        value_dict['feat_mean'] += 1.0 / value_dict['num'] * (feat_mean - value_dict['feat_mean'])
+        dict[key] = value_dict
 
     def average_hiddens(self, h_lang, hiddens):
         weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
