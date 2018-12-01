@@ -50,7 +50,9 @@ def setup(opt):
     # topdown_up_cat_weighted_hidden
     elif opt.caption_model == 'topdown_up_cat_weighted_hidden_3':
         model = TopDownUpCatWeightedHiddenModel_3(opt)
-
+    # topdown_up_cat_weighted_hidden
+    elif opt.caption_model == 'testmodel':
+        model = TestModel(opt)
     # bottomup
     elif opt.caption_model == 'bottomup':
         model = BottomUpModel(opt)

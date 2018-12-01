@@ -1092,14 +1092,349 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                               {'num': 0, 'dim_feat': [incre_std_avg.incre_std_avg() for _ in range(10)],
                                'dim_att': [incre_std_avg.incre_std_avg() for _ in range(10)], other_pair[0]: incre_std_avg.incre_std_avg()})
         value_dict['num'] += 1
-
         for i in range(10):
             value_dict['dim_feat'][i].incre_in_list(dim_feat[:, i].tolist())
             value_dict['dim_att'][i].incre_in_value(dim_att[i].item())
-
         value_dict[other_pair[0]].incre_in_value(other_pair[1])
-
         dict[key] = value_dict
+
+    def average_hiddens(self, h_lang, hiddens):
+        weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
+        return weighted_sentinal
+
+
+class TestCore(nn.Module):
+    def __init__(self, opt, use_maxout=False):
+        super(TestCore, self).__init__()
+        self.iteration = 0
+        self.drop_prob_lm = opt.drop_prob_lm
+        self.drop_prob_rnn = opt.drop_prob_rnn
+        self.drop_prob_output = opt.drop_prob_output
+        self.rnn_size = opt.rnn_size
+        self.input_encoding_size = opt.input_encoding_size
+        self.language_attention = opt.language_attention
+        self.project_hidden = opt.project_hidden
+        self.add_2_layer_hidden = opt.add_2_layer_hidden
+        self.attention_gate = opt.attention_gate
+        self.directly_add_2_layer = opt.directly_add_2_layer
+        self.LSTMN = opt.LSTMN
+        self.LSTMN_att = opt.LSTMN_att
+        self.LSTMN_lang = opt.LSTMN_lang
+        self.LSTMN_lang_att_score_method = opt.LSTMN_lang_att_score_method
+        self.input_first_att = opt.input_first_att
+        self.input_second_att = opt.input_second_att
+        self.lstm_layer_norm = opt.lstm_layer_norm
+        self.layer_norm = opt.layer_norm
+        self.norm_input = opt.norm_input
+        self.norm_output = opt.norm_output
+        self.norm_hidden = opt.norm_hidden
+        self.noh2pre = opt.noh2pre
+        self.pre = opt.pre
+        self.input_feature = opt.input_feature
+        self.output_attention = opt.output_attention
+
+        if self.noh2pre:
+            inputsize = opt.input_encoding_size + opt.rnn_size
+        else:
+            inputsize = opt.input_encoding_size + opt.rnn_size * 2
+
+
+        self.att_lstm = nn.RNNCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
+        self.lang_lstm = nn.RNNCell(opt.rnn_size, opt.rnn_size)  # h^1_t, \hat v
+
+        if self.LSTMN:
+            if self.input_first_att == 1:
+                input_first_att_size = self.input_encoding_size
+            elif self.input_first_att == 2:
+                input_first_att_size = self.input_encoding_size + self.rnn_size
+            elif self.input_first_att == 3:
+                input_first_att_size = self.input_encoding_size + 2*self.rnn_size
+            self.intra_att_att_lstm = IntraAttention(opt, input_first_att_size, opt.LSTMN_att_att_score_method)
+
+            if self.input_second_att == 1:
+                input_second_att_size = self.rnn_size
+            if self.input_second_att == 2:
+                input_second_att_size = 2*self.rnn_size
+            self.intra_att_lang_lstm = IntraAttention(opt, input_second_att_size, opt.LSTMN_lang_att_score_method)
+
+        self.attention = Attention(opt)
+        if opt.weighted_hidden:
+            self.sen_attention = SentinalAttention(opt)
+        else:
+            self.sen_attention = self.average_hiddens
+
+        # -------generate sentinal--------#
+        self.transfer_horizontal = opt.transfer_horizontal
+        self.sentinal_embed1 = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
+        self.sentinal_embed2 = lambda x: x
+
+        # output
+        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.drop = nn.Dropout(self.drop_prob_output)
+
+        if opt.nonlinear == 'relu':
+            self.tgh = nn.ReLU()
+            model_utils.kaiming_normal('relu', 0, self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'prelu':
+            self.tgh = nn.PReLU()
+            model_utils.kaiming_normal('leaky_relu', 0.25, self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'lecun_tanh':
+            self.tgh = lambda x: 1.7159 * F.tanh((2.0 / 3.0) * x)
+            model_utils.xavier_normal('tanh', self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'maxout':
+            del self.h2_affine, self.ws_affine
+            self.h2_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size)
+            self.ws_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size)
+            self.tgh = lambda x: torch.max(x.narrow(1, 0, self.rnn_size),
+                                           x.narrow(1, self.rnn_size, self.rnn_size))
+            model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'tanh':
+            self.tgh = nn.Tanh()
+            model_utils.xavier_normal('tanh', self.h2_affine, self.ws_affine)
+        elif opt.nonlinear == 'x':
+            self.tgh = lambda x: x
+            model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
+
+        if opt.sentinel_nonlinear == 'relu':
+            self.sentinel_nonlinear = nn.ReLU()
+            model_utils.kaiming_normal('relu', 0, self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'prelu':
+            self.sentinel_nonlinear = nn.PReLU()
+            model_utils.kaiming_normal('leaky_relu', 0.25, self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'lecun_tanh':
+            self.sentinel_nonlinear = lambda x: 1.7159 * F.tanh((2.0 / 3.0) * x)
+            model_utils.xavier_normal('tanh', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'maxout':
+            del self.sentinal_embed1
+            self.sentinal_embed1 = nn.Linear(opt.rnn_size, 2 * opt.rnn_size, bias=False)
+            self.sentinel_nonlinear = lambda x: torch.max(x.narrow(1, 0, self.rnn_size),
+                                           x.narrow(1, self.rnn_size, self.rnn_size))
+            model_utils.xavier_normal('linear', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'tanh':
+            self.sentinel_nonlinear = nn.Tanh()
+            model_utils.xavier_normal('tanh', self.sentinal_embed1)
+        elif opt.sentinel_nonlinear == 'x':
+            del self.sentinal_embed1
+            self.sentinal_embed1 = lambda x: x
+            self.sentinel_nonlinear = lambda x: x
+
+        if self.add_2_layer_hidden:
+            self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+            self.beta = ((opt.rnn_size + opt.rnn_size)/(2*opt.rnn_size + float(opt.rnn_size)))**0.5
+            model_utils.xavier_normal(opt.nonlinear, self.h1_affine)
+            self.h1_affine.weight.data = self.h1_affine.weight * self.beta
+            self.h2_affine.weight.data = self.h2_affine.weight * self.beta
+
+        if not self.project_hidden:
+            del self.h2_affine
+            self.h2_affine = lambda x: x
+            del self.drop
+            self.drop = nn.Dropout(0)
+            if self.add_2_layer_hidden:
+                del self.h1_affine
+                self.h1_affine = lambda x: x
+
+        if self.attention_gate:
+            self.att_gate_1 = nn.Linear(opt.rnn_size + inputsize,
+                                             inputsize)
+            self.att_gate_2 = nn.Linear(3 * opt.rnn_size, 2 * opt.rnn_size)
+
+            init.orthogonal_(self.att_gate_1.weight)
+            init.orthogonal_(self.att_gate_2.weight)
+            init.constant_(self.att_gate_1.bias, 1.0)
+            init.constant_(self.att_gate_2.bias, 1.0)
+
+        # initialization
+        model_utils.lstm_init(self.att_lstm)
+        model_utils.lstm_init(self.lang_lstm)
+
+        if self.language_attention and self.LSTMN:
+            self.Intergrate2vector = Intergrate2vector(opt, opt.Intergrate2vector)
+            self.Intergrate_instead = opt.Intergrate_instead
+            self.lang_att_before_pro = opt.lang_att_before_pro
+
+        # dynamically nonlocal
+        self.nonlocal_dy = opt.nonlocal_dy
+        self.nonlocal_residual = opt.nonlocal_residual
+        if self.nonlocal_dy:
+            self.dy_nonlocal_att = NonLocalBlock(opt, self.rnn_size, self.rnn_size, self.nonlocal_residual)
+            self.dy_nonlocal_lang = NonLocalBlock(opt, self.rnn_size, self.rnn_size, self.nonlocal_residual)
+
+        if self.input_feature == 'attention':
+            self.attention0 = Attention(opt)
+
+        if self.output_attention:
+            self.attention2 = Attention(opt)
+            self.outatt_affine = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
+            model_utils.xavier_normal('linear', self.outatt_affine)
+
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
+        pre_states = state[1:]
+        step = len(pre_states)
+        if self.LSTMN and step > 0:
+            xi = torch.cat([_[4].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+
+        # --start-------first LSTM--------#
+        if self.LSTMN:
+            h1 = state[-1][0]
+            h2 = state[-1][2]
+            c2 = state[-1][3]
+        else:
+            h1 = state[0][0]
+            h2 = state[0][1]
+            c2 = state[1][1]
+
+        att_size = att_feats.numel() // att_feats.size(0) // att_feats.size(-1)
+        weight0 = att_masks.view(-1, att_size).float()
+        weight0 = weight0 / weight0.sum(1, keepdim=True)  # normalize to 1
+        if self.input_feature == 'attention':
+            fc_feats, weight0 = self.attention0(h1, att_feats, p0_att_feats, att_masks)  # batch_size * rnn_size
+
+        if self.noh2pre:
+            att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
+        else:
+            if self.pre == 'h':
+                pre = h2
+            elif self.pre == 'c':
+                pre = c2
+            prev_h = F.dropout(pre, self.drop_prob_rnn, self.training)  # [batch_size, rnn_size]
+            att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
+
+        if self.LSTMN:
+            if step < 2 or not self.LSTMN_att:
+                h1 = state[-1][0]
+                c1 = state[-1][1]
+                layer1_weights = h1.new_zeros((h1.size(0), 1))
+            else:
+                last_att_h1 = state[0][0]
+                hi = torch.cat([_[0].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                ci = torch.cat([_[1].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                if self.input_first_att == 1:
+                    input_first_att = xt
+                elif self.input_first_att == 2:
+                    input_first_att = torch.cat([h2, xt], 1)
+                elif self.input_first_att == 3:
+                    input_first_att = torch.cat([h2, fc_feats, xt], 1)
+                h1, c1, layer1_weights = self.intra_att_att_lstm(input_first_att, last_att_h1, hi, ci, xi)   # batch * rnn_size, batch * num_hidden
+            # ---non-local--- #
+            if self.nonlocal_dy and step > 0:
+                h1i = torch.cat([_[0].unsqueeze(1) for _ in pre_states], 1)     # [batch_size, step, rnn_size]
+                h1, layer1_weights = self.dy_nonlocal_att(h1i)     # batch * rnn_size, batch * (step+1)
+            # ---non-local--- #
+        else:
+            h1 = state[0][0]
+            c1 = state[1][0]
+
+        if self.attention_gate:
+            att_lstm_input = torch.mul(att_lstm_input, F.sigmoid(
+                self.att_gate_1(torch.cat((att_lstm_input, h1), 1))))
+
+        h_att = self.att_lstm(att_lstm_input, h1)  # both are [batch_size, rnn_size]
+        # --end-------first LSTM-------- #
+
+        # --start-------second LSTM-------- #
+        att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
+
+        droped_h_att = F.dropout(h_att, self.drop_prob_rnn, self.training)
+        lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
+        # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
+
+        if self.LSTMN:
+            if step < 2 or not self.LSTMN_lang:
+                h2 = state[-1][2]
+                c2 = state[-1][3]
+                layer2_weights = h2.new_zeros((h2.size(0), 1))
+            else:
+                last_att_h2 = state[0][1]
+                hi = torch.cat([_[2].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                ci = torch.cat([_[3].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+                if self.input_second_att == 1:
+                    input_second_att = h_att
+                elif self.input_second_att == 2:
+                    input_second_att = torch.cat([att, h_att], 1)
+                h2, c2, layer2_weights = self.intra_att_lang_lstm(input_second_att, last_att_h2, hi,
+                                                                 ci, xi)  # batch * rnn_size, batch * num_hidden
+        # ---non-local--- #
+        if self.nonlocal_dy and step > 0:
+            h2i = torch.cat([_[2].unsqueeze(1) for _ in pre_states], 1)  # [batch_size, step, rnn_size]
+            h2, layer2_weights = self.dy_nonlocal_lang(h2i)  # batch * rnn_size, batch * (step+1)
+        # ---non-local--- #
+
+        if self.attention_gate:
+            lang_lstm_input = torch.mul(lang_lstm_input, F.sigmoid(self.att_gate_2(torch.cat((lang_lstm_input, h2), 1))))
+
+        h_lang = self.lang_lstm(droped_h_att, h2)  # batch*rnn_size
+        # --end------second LSTM--------#
+
+        # --start-------generate output--------#
+        if self.add_2_layer_hidden:
+            affined_linear = self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att))
+        elif self.directly_add_2_layer:
+            affined_linear = self.h2_affine(self.drop((h_lang + h_att) / 1.4142))
+        else:
+            affined_linear = self.h2_affine(self.drop(h_lang))
+        if self.LSTMN:
+            lang_weights = (layer1_weights + layer2_weights) / 2.0
+        else:
+            lang_weights = torch.zeros_like(h2)
+
+        if self.output_attention:
+            att_output, weight2 = self.attention2(h_lang, att_feats, p2_att_feats, att_masks)  # batch_size * rnn_size
+            affined_linear += self.outatt_affine(self.drop(att_output))
+
+        affined = self.tgh(affined_linear)
+
+        output = F.dropout(affined, self.drop_prob_lm, self.training)  # batch_size * rnn_size
+        # --end-------generate output--------#
+
+        # --start-------generate state--------#
+        if self.LSTMN:
+            if self.language_attention:
+                if self.Intergrate_instead:
+                    state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                    torch.stack([h_att, h_att, h_lang, h_lang, affined_linear]),)
+                else:
+                    state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                        torch.stack([h_att, h_att, h_lang, h_lang, affined_linear]),)
+            else:
+                state = (torch.stack([h1, h2, h1, h2, h1]),) + tuple(pre_states) + (
+                torch.stack([h_att, h_att, h_lang, h_lang, affined]),)
+        else:
+            if self.transfer_horizontal:
+                state = (torch.stack([h_att, affined]), torch.stack([h_att, h_lang]))
+            else:
+                state = (torch.stack([h_att, h_lang]), torch.stack([h_att, h_lang]))
+
+            if self.language_attention:
+                sentinal_current = self.sentinal_embed2(self.sentinal_embed1(h_lang))  # batch* rnn_size
+                sentinal_current = self.sentinel_nonlinear(sentinal_current)  # batch* rnn_size
+                state = state + tuple(pre_states) + (torch.stack([sentinal_current, torch.zeros_like(sentinal_current)]),)
+        # --end-------generate state--------#
+
+        # visualization
+        if step == 6:
+            self.iteration += 1
+            if self.iteration > 10 and self.iteration % 100 == 0:
+                batch_size = att_feats.size(0)
+                if self.input_feature == 'attention':
+                    print('The attention distribution of the input attention:')
+                    random.seed(123)
+                    for i in random.sample(range(batch_size), 3):
+                        print(weight0[i][att_masks[i] != 0])
+
+                # print('The attention distribution of the first LSTM attention:')
+                # random.seed(123)
+                # for i in random.sample(range(batch_size), 3):
+                #     print(weight[i][att_masks[i] != 0])
+
+                if self.output_attention:
+                    print('The attention distribution of the output attention:')
+                    random.seed(123)
+                    for i in random.sample(range(batch_size), 3):
+                        print(weight2[i][att_masks[i] != 0])
+
+        return output, state, lang_weights
 
     def average_hiddens(self, h_lang, hiddens):
         weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
@@ -1592,17 +1927,22 @@ class IntraAttention(nn.Module):
 
 
 class NonLocalBlock(nn.Module):
-    def __init__(self, opt, in_size, inter_size=None):
+    def __init__(self, opt, in_size, inter_size=None, residual=True):
         super(NonLocalBlock, self).__init__()
 
         self.in_size = in_size
         self.inter_size = inter_size
         self.nonlocal_dy_bn = opt.nonlocal_dy_bn
+        self.residual = residual
+        self.project_g = opt.project_g
 
         if self.inter_size is None:
             self.inter_size = in_size // 2
 
-        self.g = nn.Linear(self.in_size, self.inter_size)
+        if self.project_g:
+            self.g = nn.Linear(self.in_size, self.inter_size)
+        else:
+            self.g = lambda x: x
         self.theta = nn.Linear(self.in_size, self.inter_size)
         self.phi = nn.Linear(self.in_size, self.inter_size)
 
@@ -1624,7 +1964,8 @@ class NonLocalBlock(nn.Module):
 
         # initialization
         model_utils.kaiming_normal('relu', 0, self.theta, self.phi)
-        model_utils.xavier_normal('linear', self.g)
+        if self.project_g:
+            model_utils.xavier_normal('linear', self.g)
 
     def forward(self, x):
         '''
@@ -1644,10 +1985,11 @@ class NonLocalBlock(nn.Module):
         f_div_C = F.softmax(f, dim=1)   # batch * (step+1)
 
         f_div_C = f_div_C.unsqueeze(1)  # batch * 1 * (step+1)
-        y = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
+        z = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
 
-        W_y = self.W(y)             # batch * rnn_size
-        z = W_y + x[:, -1, :]
+        if self.residual:
+            W_y = self.W(z)             # batch * rnn_size
+            z = W_y + x[:, -1, :]
 
         return z, f_div_C.squeeze(1)  # batch * rnn_size, batch * (step+1)
 
@@ -1807,6 +2149,13 @@ class TopDownUpCatWeightedHiddenModel_3(AttModel):
         super(TopDownUpCatWeightedHiddenModel_3, self).__init__(opt)
         self.num_layers = 2
         self.core = TopDownUpCatWeightedHiddenCore3(opt)
+
+
+class TestModel(AttModel):
+    def __init__(self, opt):
+        super(TestModel, self).__init__(opt)
+        self.num_layers = 2
+        self.core = TestCore(opt)
 
 
 class BottomUpModel(AttModel):
