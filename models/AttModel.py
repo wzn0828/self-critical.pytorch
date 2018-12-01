@@ -60,7 +60,8 @@ class AttModel(CaptionModel):
         # self.rnn_type = opt.rnn_type
         self.rnn_size = opt.rnn_size
         self.num_layers = opt.num_layers
-        self.drop_prob_feat = opt.drop_prob_feat
+        self.drop_prob_attfeat = opt.drop_prob_attfeat
+        self.drop_prob_fcfeat = opt.drop_prob_fcfeat
         self.drop_prob_embed = opt.drop_prob_embed
         self.seq_length = opt.seq_length
         self.fc_feat_size = opt.fc_feat_size
@@ -87,14 +88,14 @@ class AttModel(CaptionModel):
                 (nn.Linear(self.fc_feat_size, self.rnn_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if opt.fc_use_bn == 2 else ()) +
-                (nn.Dropout(self.drop_prob_feat),)))
+                (nn.Dropout(self.drop_prob_fcfeat),)))
 
         self.att_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
                 (nn.Linear(self.att_feat_size, self.rnn_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
-                (nn.Dropout(self.drop_prob_feat),)))
+                (nn.Dropout(self.drop_prob_attfeat),)))
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
