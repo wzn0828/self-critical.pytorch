@@ -2068,17 +2068,22 @@ class IntraAttention(nn.Module):
 
 
 class NonLocalBlock(nn.Module):
-    def __init__(self, opt, in_size, inter_size=None):
+    def __init__(self, opt, in_size, inter_size=None, residual=True):
         super(NonLocalBlock, self).__init__()
 
         self.in_size = in_size
         self.inter_size = inter_size
         self.nonlocal_dy_bn = opt.nonlocal_dy_bn
+        self.residual = residual
+        self.project_g = opt.project_g
 
         if self.inter_size is None:
             self.inter_size = in_size // 2
 
-        self.g = nn.Linear(self.in_size, self.inter_size)
+        if self.project_g:
+            self.g = nn.Linear(self.in_size, self.inter_size)
+        else:
+            self.g = lambda x: x
         self.theta = nn.Linear(self.in_size, self.inter_size)
         self.phi = nn.Linear(self.in_size, self.inter_size)
 
@@ -2100,7 +2105,8 @@ class NonLocalBlock(nn.Module):
 
         # initialization
         model_utils.kaiming_normal('relu', 0, self.theta, self.phi)
-        model_utils.xavier_normal('linear', self.g)
+        if self.project_g:
+            model_utils.xavier_normal('linear', self.g)
 
     def forward(self, x):
         '''
@@ -2120,10 +2126,11 @@ class NonLocalBlock(nn.Module):
         f_div_C = F.softmax(f, dim=1)   # batch * (step+1)
 
         f_div_C = f_div_C.unsqueeze(1)  # batch * 1 * (step+1)
-        y = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
+        z = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
 
-        W_y = self.W(y)             # batch * rnn_size
-        z = W_y + x[:, -1, :]
+        if self.residual:
+            W_y = self.W(z)             # batch * rnn_size
+            z = W_y + x[:, -1, :]
 
         return z, f_div_C.squeeze(1)  # batch * rnn_size, batch * (step+1)
 
