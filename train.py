@@ -355,7 +355,7 @@ def train(opt):
         if opt.tensorboard_weights_grads and (iteration % (8*opt.losses_log_every) == 0):
             # add weights histogram to tensorboard summary
             for name, param in model.named_parameters():
-                if (name in opt.tensorboard_parameters_name or opt.tensorboard_parameters_name is None) and param.grad is not None:
+                if (opt.tensorboard_parameters_name is None or sum([p_name in name for p_name in opt.tensorboard_parameters_name]) > 0) and param.grad is not None:
                     tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
                     tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
         if opt.distance_sensitive_coefficient and iteration % (4 * opt.losses_log_every) == 0:
