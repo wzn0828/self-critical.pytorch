@@ -74,6 +74,7 @@ class AttModel(CaptionModel):
         self.LN_out_embedding = opt.LN_out_embedding
         self.print_lang_weights = opt.print_lang_weights
         self.input_feature = opt.input_feature
+        self.att_normalize_method = opt.att_normalize_method
 
         self.use_bn = getattr(opt, 'use_bn', 0)
 
@@ -97,6 +98,12 @@ class AttModel(CaptionModel):
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
                 ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
+
+        # prepair for normalize
+        if self.att_normalize_method == '2' and self.use_bn == 2:
+            # self.att_embed[3].bias.requires_grad = False
+            # self.att_embed[3].bias = self.att_embed[3].weight.data.new_zeros(self.rnn_size)
+            self.att_embed[3].bias = None
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
@@ -697,6 +704,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.pre = opt.pre
         self.input_feature = opt.input_feature
         self.output_attention = opt.output_attention
+        self.att_normalize_method = opt.att_normalize_method
+        self.att_normalize_rate = opt.att_normalize_rate
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.rnn_size
@@ -848,6 +857,12 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.dim_att_statics_numboxes = {}
             self.dim_att_statics_l2weight = {}
 
+        # normalize attentioned feature
+        if self.att_normalize_method == '2':
+            self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.rnn_size)))
+        elif self.att_normalize_method == '3':
+            self.att_BN = nn.BatchNorm1d(self.rnn_size, affine=False)
+
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
         pre_states = state[1:]
         step = len(pre_states)
@@ -909,6 +924,27 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # --start-------second LSTM-------- #
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
+        # normalize attention:
+        # compute l2
+        if self.att_normalize_method is not None:
+            batch_size = att_feats.size(0)
+            l2_weight = att_feats.new_ones(batch_size)       # batch_size
+            num_feats = att_masks.sum(dim=1).int()
+            for i in range(batch_size):
+                l2_weight[i] = weight[i][:num_feats[i]].norm().item()
+            l2_weight = l2_weight*self.att_normalize_rate        # batch_size
+            l2_weight = l2_weight.unsqueeze(1)              # batch_size * 1
+        # method 1: attention/l2
+        if self.att_normalize_method == '1':
+            att = att/l2_weight
+        # method 2: attention/l2 + bias(parameter), previous attfeat project's BN is set to no bias
+        elif self.att_normalize_method == '2':
+            att = att/l2_weight + self.att_bias
+        # method 3: (attention-running_mean)/l2 + running_mean
+        elif self.att_normalize_method == '3':
+            self.att_BN(att)
+            att = (att - self.att_BN.running_mean)/l2_weight + self.att_BN.running_mean
+
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
 
@@ -1077,7 +1113,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
             # ---generate a variance statics dictionary--- #
 
-        # visualization
+        # end visualization #
 
         return output, state, lang_weights
 
