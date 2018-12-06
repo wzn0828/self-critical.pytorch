@@ -935,7 +935,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
         # normalize attention:
         # compute l2
-        if self.att_normalize_method is not None:
+        if self.att_normalize_method is not None and '4' not in self.att_normalize_method:
             batch_size = att_feats.size(0)
             l2_weight = att_feats.new_ones(batch_size)       # batch_size
             num_feats = att_masks.sum(dim=1).int()
