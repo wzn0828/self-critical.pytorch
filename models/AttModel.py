@@ -862,6 +862,15 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.rnn_size)))
         elif self.att_normalize_method == '3':
             self.att_BN = nn.BatchNorm1d(self.rnn_size, affine=False)
+        elif self.att_normalize_method == '4-0':
+            self.att_r = self.h2_affine.weight.data.new_ones(1).cuda()
+            self.att_bias = self.h2_affine.weight.data.new_zeros(1).cuda()
+        elif self.att_normalize_method == '4-1':
+            self.att_r = nn.Parameter(self.h2_affine.weight.data.new_ones(1))
+            self.att_bias = self.h2_affine.weight.data.new_zeros(1).cuda()
+        elif self.att_normalize_method == '4-2':
+            self.att_r = nn.Parameter(self.h2_affine.weight.data.new_ones(1))
+            self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros(1))
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
         pre_states = state[1:]
@@ -944,6 +953,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif self.att_normalize_method == '3':
             self.att_BN(att)
             att = (att - self.att_BN.running_mean)/l2_weight + self.att_BN.running_mean
+        # method 4:
+        elif '4' in self.att_normalize_method:
+            att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
+
 
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
