@@ -56,6 +56,7 @@ class AttModel(CaptionModel):
     def __init__(self, opt):
         super(AttModel, self).__init__()
         self.vocab_size = opt.vocab_size
+        self.encoded_feat_size = opt.encoded_feat_size
         self.input_encoding_size = opt.input_encoding_size
         # self.rnn_type = opt.rnn_type
         self.rnn_size = opt.rnn_size
@@ -87,16 +88,16 @@ class AttModel(CaptionModel):
                                      ))
         self.fc_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.fc_feat_size),) if opt.fc_use_bn else ()) +
-                (nn.Linear(self.fc_feat_size, self.rnn_size),
+                (nn.Linear(self.fc_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
-                ((nn.BatchNorm1d(self.rnn_size),) if opt.fc_use_bn == 2 else ()) +
+                ((nn.BatchNorm1d(self.encoded_feat_size),) if opt.fc_use_bn == 2 else ()) +
                 (nn.Dropout(self.drop_prob_fcfeat),)))
 
         self.att_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
-                (nn.Linear(self.att_feat_size, self.rnn_size),
+                (nn.Linear(self.att_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
-                ((nn.BatchNorm1d(self.rnn_size),) if self.use_bn == 2 else ()) +
+                ((nn.BatchNorm1d(self.encoded_feat_size),) if self.use_bn == 2 else ()) +
                 ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
 
         # prepair for normalize
@@ -115,7 +116,7 @@ class AttModel(CaptionModel):
             self.logit = nn.Sequential(
                 *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1)]))
 
-        self.ctx2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) +
+        self.ctx2att = nn.Sequential(*((nn.Linear(self.encoded_feat_size, self.att_hid_size),) +
                                        ((nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())
                                        ))
 
@@ -138,7 +139,7 @@ class AttModel(CaptionModel):
         model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
                                    filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
         model_utils.xavier_normal('tanh', self.ctx2att[0])
-        self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
+        self.beta = ((self.att_hid_size + self.encoded_feat_size) / (float(self.att_hid_size) + self.rnn_size + self.encoded_feat_size)) ** 0.5
         self.ctx2att[0].weight.data = self.ctx2att[0].weight*self.beta
 
         if self.LSTMN and self.adaptive_t0:
@@ -151,8 +152,8 @@ class AttModel(CaptionModel):
             nn.init.normal_(self.h2t0, mean=0, std=0.1)
             nn.init.normal_(self.c2t0, mean=0, std=0.1)
 
-        self.ctx2att0 = nn.Linear(self.rnn_size, self.att_hid_size)
-        self.ctx2att2 = nn.Linear(self.rnn_size, self.att_hid_size)
+        self.ctx2att0 = nn.Linear(self.encoded_feat_size, self.att_hid_size)
+        self.ctx2att2 = nn.Linear(self.encoded_feat_size, self.att_hid_size)
         model_utils.xavier_normal('linear', self.ctx2att0, self.ctx2att2)
 
         self.save_att_statics = opt.save_att_statics
@@ -708,16 +709,16 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.att_normalize_rate = opt.att_normalize_rate
 
         if self.noh2pre:
-            inputsize = opt.input_encoding_size + opt.rnn_size
+            inputsize = opt.input_encoding_size + opt.encoded_feat_size
         else:
-            inputsize = opt.input_encoding_size + opt.rnn_size * 2
+            inputsize = opt.input_encoding_size + opt.rnn_size + opt.encoded_feat_size
 
         if self.lstm_layer_norm:
             self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
-            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size * 2, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
+            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
         else:
             self.att_lstm = nn.LSTMCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
-            self.lang_lstm = nn.LSTMCell(opt.rnn_size * 2, opt.rnn_size)  # h^1_t, \hat v
+            self.lang_lstm = nn.LSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size)  # h^1_t, \hat v
 
         if self.LSTMN:
             if self.input_first_att == 1:
@@ -935,27 +936,28 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         att, weight = self.attention(h_att, att_feats, p_att_feats, att_masks)  # batch_size * rnn_size
         # normalize attention:
         # compute l2
-        if self.att_normalize_method is not None and '4' not in self.att_normalize_method:
-            batch_size = att_feats.size(0)
-            l2_weight = att_feats.new_ones(batch_size)       # batch_size
-            num_feats = att_masks.sum(dim=1).int()
-            for i in range(batch_size):
-                l2_weight[i] = weight[i][:num_feats[i]].norm().item()
-            l2_weight = l2_weight*self.att_normalize_rate        # batch_size
-            l2_weight = l2_weight.unsqueeze(1)              # batch_size * 1
-        # method 1: attention/l2
-        if self.att_normalize_method == '1':
-            att = att/l2_weight
-        # method 2: attention/l2 + bias(parameter), previous attfeat project's BN is set to no bias
-        elif self.att_normalize_method == '2':
-            att = att/l2_weight + self.att_bias
-        # method 3: (attention-running_mean)/l2 + running_mean
-        elif self.att_normalize_method == '3':
-            self.att_BN(att)
-            att = (att - self.att_BN.running_mean)/l2_weight + self.att_BN.running_mean
-        # method 4:
-        elif '4' in self.att_normalize_method:
-            att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
+        if self.att_normalize_method is not None:
+            if '4' not in self.att_normalize_method:
+                batch_size = att_feats.size(0)
+                l2_weight = att_feats.new_ones(batch_size)       # batch_size
+                num_feats = att_masks.sum(dim=1).int()
+                for i in range(batch_size):
+                    l2_weight[i] = weight[i][:num_feats[i]].norm().item()
+                l2_weight = l2_weight*self.att_normalize_rate        # batch_size
+                l2_weight = l2_weight.unsqueeze(1)              # batch_size * 1
+            # method 1: attention/l2
+            if self.att_normalize_method == '1':
+                att = att/l2_weight
+            # method 2: attention/l2 + bias(parameter), previous attfeat project's BN is set to no bias
+            elif self.att_normalize_method == '2':
+                att = att/l2_weight + self.att_bias
+            # method 3: (attention-running_mean)/l2 + running_mean
+            elif self.att_normalize_method == '3':
+                self.att_BN(att)
+                att = (att - self.att_BN.running_mean)/l2_weight + self.att_BN.running_mean
+            # method 4:
+            elif '4' in self.att_normalize_method:
+                att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
 
 
         if self.drop_attfeat_location == 'after_attention':
