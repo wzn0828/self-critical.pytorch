@@ -882,8 +882,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             # initialization
             self.att_mean.weight.data.zero_()
             self.att_mean.bias.data.zero_()
-            self.att_std.weight.data.zero_()
-            self.att_std.bias.data.fill_(1.0)
+            self.att_std.weight.data.fill_(opt.att_std_weight_init)
+            self.att_std.bias.data.fill_(opt.att_std_bias_init)
             if self.att_normalize_method == '5-0' or self.att_normalize_method == '5-1':
                 del self.att_mean
                 self.att_mean = lambda x: 0
