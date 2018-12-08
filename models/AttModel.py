@@ -707,6 +707,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.output_attention = opt.output_attention
         self.att_normalize_method = opt.att_normalize_method
         self.att_normalize_rate = opt.att_normalize_rate
+        self.encoded_feat_size = opt.encoded_feat_size
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.encoded_feat_size
@@ -872,6 +873,26 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif self.att_normalize_method == '4-2':
             self.att_r = nn.Parameter(self.h2_affine.weight.data.new_ones(1))
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros(1))
+        elif '5' in self.att_normalize_method:
+            self.att_normalize_rate = 1
+            self.att_mean = nn.Linear(1, self.encoded_feat_size)
+            self.att_std = nn.Linear(1, self.encoded_feat_size)
+            self.att_weight = nn.Parameter(self.h2_affine.weight.data.new_ones(self.encoded_feat_size))
+            self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros(self.encoded_feat_size))
+            # initialization
+            self.att_mean.weight.data.zero_()
+            self.att_mean.bias.data.zero_()
+            self.att_std.weight.data.zero_()
+            self.att_std.bias.data.fill_(1.0)
+            if self.att_normalize_method == '5-0' or self.att_normalize_method == '5-1':
+                del self.att_mean
+                self.att_mean = lambda x: 0
+            if self.att_normalize_method == '5-0' or self.att_normalize_method == '5-2':
+                del self.att_weight
+                self.att_weight = self.h2_affine.weight.data.new_ones(self.encoded_feat_size).cuda()
+                del self.att_bias
+                self.att_bias = self.h2_affine.weight.data.new_zeros(self.encoded_feat_size).cuda()
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
         pre_states = state[1:]
@@ -958,7 +979,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             # method 4:
             elif '4' in self.att_normalize_method:
                 att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
-
+            # method 5:
+            elif '5' in self.att_normalize_method:
+                att = self.att_weight*(att - self.att_mean(l2_weight))/self.att_std(l2_weight) + self.att_bias
 
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
