@@ -873,7 +873,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif self.att_normalize_method == '4-2':
             self.att_r = nn.Parameter(self.h2_affine.weight.data.new_ones(1))
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros(1))
-        elif '5' in self.att_normalize_method:
+        elif self.att_normalize_method is not None and '5' in self.att_normalize_method:
             self.att_normalize_rate = 1
             self.att_mean = nn.Linear(1, self.encoded_feat_size)
             self.att_std = nn.Linear(1, self.encoded_feat_size)
