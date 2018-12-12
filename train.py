@@ -243,7 +243,9 @@ def train(opt):
     crit = utils.LanguageModelCriterion()
     rl_crit = utils.RewardCriterion()
 
-    optimizer = utils.build_optimizer(model.parameters(), opt)
+    # build_optimizer
+    optimizer = build_optimizer(model, opt)
+
     # Load the optimizer
     if vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
@@ -390,8 +392,27 @@ def train(opt):
         if iteration >= opt.max_iter:
             break
 
-opt = opts.parse_opt()
 
+def build_optimizer(model, opt):
+    optimized = [{'params': list(model.parameters())}]
+    # if opt.att_normalize_method is '6', finetuning will be needed
+    if opt.att_normalize_method is not None and '6' in opt.att_normalize_method:
+        fine_tuned = list(model.core.lang_lstm.parameters())
+        fine_tuned.extend(list(model.core.h2_affine.parameters()))
+        fine_tuned.extend(list(model.logit.parameters()))
+        if opt.att_normalize_method == '6-1' or opt.att_normalize_method == '6-3':
+            fine_tuned.extend(model.core.att_linear_project.parameters())
+
+        optimized = list(set(optimized[0]['params']).difference(set(fine_tuned)))
+        optimized = [{'params': optimized},
+                     {'params': fine_tuned}]
+
+    optimizer = utils.build_optimizer(optimized, opt)
+
+    return optimizer
+
+
+opt = opts.parse_opt()
 
 #----for my local set----#
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
