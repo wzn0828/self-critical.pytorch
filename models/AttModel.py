@@ -1144,8 +1144,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                     self.generate_dict(num_feat, self.att_statics_numfeat, att_mean, att_std, feat_mean, feat_std, ('l2_weight', l2_weight))
                     self.generate_dict(l2_weight, self.att_statics_weights_l2, att_mean, att_std, feat_mean, feat_std, ('num_boxes', num_feat))
 
-                    dim_feat = att_feats[i][:num_feats[i], 50:501:50]
-                    dim_att = att[i][50:501:50]
+                    dim_feat = att_feats[i][:num_feats[i], :]
+                    dim_att = att[i][:]
 
                     self.generate_dim_dict(num_feat, self.dim_att_statics_numboxes, dim_feat, dim_att, ('l2_weight', l2_weight))
                     self.generate_dim_dict(l2_weight, self.dim_att_statics_l2weight, dim_feat, dim_att, ('num_boxes', num_feat))
@@ -1182,10 +1182,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
     def generate_dim_dict(self, key, dict, dim_feat, dim_att, other_pair):
         value_dict = dict.get(key,
-                              {'num': 0, 'dim_feat': [incre_std_avg.incre_std_avg() for _ in range(10)],
-                               'dim_att': [incre_std_avg.incre_std_avg() for _ in range(10)], other_pair[0]: incre_std_avg.incre_std_avg()})
+                              {'num': 0, 'dim_feat': [incre_std_avg.incre_std_avg() for _ in range(self.encoded_feat_size)],
+                               'dim_att': [incre_std_avg.incre_std_avg() for _ in range(self.encoded_feat_size)], other_pair[0]: incre_std_avg.incre_std_avg()})
         value_dict['num'] += 1
-        for i in range(10):
+        for i in range(self.encoded_feat_size):
             value_dict['dim_feat'][i].incre_in_list(dim_feat[:, i].tolist())
             value_dict['dim_att'][i].incre_in_value(dim_att[i].item())
         value_dict[other_pair[0]].incre_in_value(other_pair[1])
