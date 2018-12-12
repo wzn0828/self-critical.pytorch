@@ -66,8 +66,10 @@ class LanguageModelCriterion(nn.Module):
         return output
 
 def set_lr(optimizer, lr):
-    for group in optimizer.param_groups:
-        group['lr'] = lr
+    # for group in optimizer.param_groups:
+    #     group['lr'] = lr
+    optimizer.param_groups[0]['lr'] = lr[0]
+    optimizer.param_groups[1]['lr'] = lr[1]
 
 def clip_gradient(optimizer, grad_clip):
     for group in optimizer.param_groups:

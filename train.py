@@ -256,11 +256,15 @@ def train(opt):
             # Assign the learning rate
             if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
                 frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
-                decay_factor = opt.learning_rate_decay_rate  ** frac
+                decay_factor = opt.learning_rate_decay_rate ** frac
                 opt.current_lr = opt.learning_rate * decay_factor
             else:
                 opt.current_lr = opt.learning_rate
-            utils.set_lr(optimizer, opt.current_lr)
+            lr = [opt.current_lr, opt.current_lr]
+            if opt.fine_tuned:
+                lr = [opt.current_lr, opt.lr_ratio*opt.current_lr]
+            utils.set_lr(optimizer, lr)
+            print('learning rate is: ' + str(lr))
 
             # Assign the scheduled sampling prob
             if epoch > opt.scheduled_sampling_start and opt.scheduled_sampling_start >= 0:
