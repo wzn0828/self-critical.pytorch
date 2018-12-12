@@ -400,7 +400,7 @@ def build_optimizer(model, opt):
         fine_tuned = list(model.core.lang_lstm.parameters())
         fine_tuned.extend(list(model.core.h2_affine.parameters()))
         fine_tuned.extend(list(model.logit.parameters()))
-        if opt.att_normalize_method == '6-1' or opt.att_normalize_method == '6-3':
+        if opt.att_normalize_method == '6-1' or opt.att_normalize_method == '6-1-0' or opt.att_normalize_method == '6-3':
             fine_tuned.extend(model.core.att_linear_project.parameters())
 
         optimized = list(set(optimized[0]['params']).difference(set(fine_tuned)))

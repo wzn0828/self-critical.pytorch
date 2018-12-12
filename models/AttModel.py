@@ -894,7 +894,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         elif self.att_normalize_method is not None and '6' in self.att_normalize_method:
             self.att_normalize_rate = 1
             self.att_norm = att_normalization(opt)
-            if self.att_normalize_method == '6-1' or self.att_normalize_method == '6-3':
+            if self.att_normalize_method == '6-1' or self.att_normalize_method == '6-1-0' or self.att_normalize_method == '6-3':
                 self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
             else:
                 self.att_linear_project = lambda x: x

@@ -67,10 +67,22 @@ def setup(opt):
         if opt.load_best:
             assert os.path.isfile(os.path.join(opt.start_from,
                                                "infos_" + opt.id + "-best.pkl")), "infos_-best.pkl file does not exist in path %s" % opt.start_from
-            model.load_state_dict(torch.load(os.path.join(opt.start_from, 'model-best.pth')))
+            state_dict = torch.load(os.path.join(opt.start_from, 'model-best.pth'))
         else:
             assert os.path.isfile(os.path.join(opt.start_from,
                                                "infos_" + opt.id + ".pkl")), "infos.pkl file does not exist in path %s" % opt.start_from
-            model.load_state_dict(torch.load(os.path.join(opt.start_from, 'model.pth')))
+            state_dict = torch.load(os.path.join(opt.start_from, 'model.pth'))
+
+        if opt.att_normalize_method == '6-1-0':
+            del state_dict['core.lang_lstm.weight_hh']
+            del state_dict['core.lang_lstm.bias_hh']
+            del state_dict['core.lang_lstm.weight_ih']
+            del state_dict['core.lang_lstm.bias_ih']
+            del state_dict['core.h2_affine.weight']
+            del state_dict['core.h2_affine.bias']
+            del state_dict['logit.weight']
+            del state_dict['logit.bias']
+
+        model.load_state_dict(state_dict, strict=False)
 
     return model
