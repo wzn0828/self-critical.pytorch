@@ -708,6 +708,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.att_normalize_method = opt.att_normalize_method
         self.att_normalize_rate = opt.att_normalize_rate
         self.encoded_feat_size = opt.encoded_feat_size
+        self.att_norm_reg_paras_path = opt.att_norm_reg_paras_path
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.encoded_feat_size
@@ -877,8 +878,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_normalize_rate = 1
             self.att_mean = nn.Linear(1, self.encoded_feat_size)
             self.att_std = nn.Linear(1, self.encoded_feat_size)
-            self.att_weight = nn.Parameter(self.h2_affine.weight.data.new_ones(self.encoded_feat_size))
-            self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros(self.encoded_feat_size))
             # initialization
             self.att_mean.weight.data.zero_()
             self.att_mean.bias.data.zero_()
@@ -887,11 +886,18 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             if self.att_normalize_method == '5-0' or self.att_normalize_method == '5-1':
                 del self.att_mean
                 self.att_mean = lambda x: 0
-            if self.att_normalize_method == '5-0' or self.att_normalize_method == '5-2':
-                del self.att_weight
-                self.att_weight = self.h2_affine.weight.data.new_ones(self.encoded_feat_size).cuda()
-                del self.att_bias
-                self.att_bias = self.h2_affine.weight.data.new_zeros(self.encoded_feat_size).cuda()
+            if self.att_normalize_method == '5-1' or self.att_normalize_method == '5-3':
+                self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
+            else:
+                self.att_linear_project = lambda x: x
+
+        elif self.att_normalize_method is not None and '6' in self.att_normalize_method:
+            self.att_normalize_rate = 1
+            self.att_norm = att_normalization(opt)
+            if self.att_normalize_method == '6-1' or self.att_normalize_method == '6-3':
+                self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
+            else:
+                self.att_linear_project = lambda x: x
 
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
@@ -981,7 +987,12 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
             # method 5:
             elif '5' in self.att_normalize_method:
-                att = self.att_weight*(att - self.att_mean(l2_weight))/self.att_std(l2_weight) + self.att_bias
+                att = (att - self.att_mean(l2_weight)) / self.att_std(l2_weight)
+                att = self.att_linear_project(att)
+            # method 6:
+            elif '6' in self.att_normalize_method:
+                att = self.att_linear_project(self.att_norm(l2_weight, att))
+
 
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
@@ -1183,6 +1194,58 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def average_hiddens(self, h_lang, hiddens):
         weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
         return weighted_sentinal
+
+
+class att_normalization(nn.Module):
+    def __init__(self, opt):
+        super(att_normalization, self).__init__()
+        self.att_norm_reg_paras_path = opt.att_norm_reg_paras_path
+        self.encoded_feat_size = opt.encoded_feat_size
+        self.att_normalize_method = opt.att_normalize_method
+
+        self.att_norm_reg_paras = torch.Tensor(np.load(self.att_norm_reg_paras_path))
+
+        self.att_norm_reg_mean_w = self.att_norm_reg_paras[0].unsqueeze(0).cuda()
+        self.att_norm_reg_mean_b = self.att_norm_reg_paras[1].unsqueeze(0).cuda()
+        self.att_norm_reg_std_w = self.att_norm_reg_paras[2].unsqueeze(0).cuda()
+        self.att_norm_reg_std_b = self.att_norm_reg_paras[3].unsqueeze(0).cuda()
+
+        if self.att_normalize_method == '6-2' or self.att_normalize_method == '6-3':
+            self.att_norm_reg_mean_w = nn.Parameter(self.att_norm_reg_mean_w)
+            self.att_norm_reg_mean_b = nn.Parameter(self.att_norm_reg_mean_b)
+            self.att_norm_reg_std_w = nn.Parameter(self.att_norm_reg_std_w)
+            self.att_norm_reg_std_b = nn.Parameter(self.att_norm_reg_std_b)
+
+
+    def forward(self, l2_weight, attentioned_feat):
+        '''
+        :param l2_ewight: size is batch*1
+        :param attentioned_feat: batch*encoded_feat_size
+        :return: batch*encoded_feat_size
+        '''
+        att_mean = torch.mm(l2_weight, self.att_norm_reg_mean_w) + self.att_norm_reg_mean_b
+        att_std = torch.mm(l2_weight, self.att_norm_reg_std_w) + self.att_norm_reg_std_b
+        attentioned_feat = (attentioned_feat - att_mean) / att_std
+
+        return attentioned_feat
+
+
+class Linear_Project(nn.Module):
+    def __init__(self, dim, has_bias=True):
+        super(Linear_Project, self).__init__()
+        self.dim = dim
+        self.has_bias = has_bias
+
+        self.weight = nn.Parameter(torch.ones(self.dim))
+        self.bias = torch.zeros(self.dim).cuda()
+        if self.has_bias:
+            self.bias = nn.Parameter(self.bias)
+
+    def forward(self, input):
+        projected = self.weight * input + self.bias
+
+        return projected
+
 
 
 class TestCore(nn.Module):
