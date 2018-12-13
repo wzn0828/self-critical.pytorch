@@ -262,8 +262,8 @@ def train(opt):
                 opt.current_lr = opt.learning_rate * decay_factor
             else:
                 opt.current_lr = opt.learning_rate
-            lr = [opt.current_lr, opt.current_lr]
-            if opt.fine_tuned:
+            lr = [opt.current_lr]
+            if opt.att_normalize_method is not None and '6' in opt.att_normalize_method:
                 lr = [opt.current_lr, opt.lr_ratio*opt.current_lr]
             utils.set_lr(optimizer, lr)
             print('learning rate is: ' + str(lr))
