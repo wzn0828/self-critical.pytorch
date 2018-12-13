@@ -281,7 +281,7 @@ class AttModel(CaptionModel):
         # 'it' contains a word index
         xt = self.embed(it)  # [batch_size, input_encoding_size]
 
-        output, state, lang_weights = self.core(xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks, self.att_embed[3].weight)  # batch*rn_size
+        output, state, lang_weights = self.core(xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks, self.att_embed[3].weight, self.att_embed[3].bias)  # batch*rn_size
         logprobs = F.log_softmax(self.logit(output), dim=1)  # batch*(vocab_size+1)
 
         return logprobs, state, lang_weights
@@ -908,7 +908,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
 
 
-    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None):
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None, mean_feat=None):
         pre_states = state[1:]
         step = len(pre_states)
         if self.LSTMN and step > 0:
@@ -1008,6 +1008,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 std = self.attstd_linear_project(std)
                 att = (att - mean)/std
                 att = self.att_linear_project(att)
+            # method 10:
+            elif self.att_normalize_method =='10':
+                att = (att - mean_feat) / l2_weight + mean_feat
+
+
 
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
