@@ -904,8 +904,17 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.attstd_linear_project = Linear_Project(1, has_bias=True)
             elif self.att_normalize_method == '9-1':
                 self.attstd_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
-
             self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
+        elif self.att_normalize_method == 't1':
+            self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
+        elif self.att_normalize_method == 't2':
+            self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=False, momentum=0.01)
+            self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
+        elif self.att_normalize_method == 't3':
+            self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=True, momentum=0.01)
+        elif self.att_normalize_method == 't4':
+            self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=False, momentum=0.01)
+            self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.encoded_feat_size)))
 
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None, mean_feat=None):
@@ -972,7 +981,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # normalize attention:
         # compute l2
         if self.att_normalize_method is not None:
-            if '4' not in self.att_normalize_method:
+            if self.att_normalize_method not in ['4-0', '4-1', '4-2'] and self.att_normalize_method != 't1' and self.att_normalize_method != 't3':
                 batch_size = att_feats.size(0)
                 l2_weight = att_feats.new_ones(batch_size)       # batch_size
                 num_feats = att_masks.sum(dim=1).int()
@@ -991,7 +1000,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.att_BN(att)
                 att = (att - self.att_BN.running_mean)/l2_weight + self.att_BN.running_mean
             # method 4:
-            elif '4' in self.att_normalize_method:
+            elif self.att_normalize_method in ['4-0', '4-1', '4-2']:
                 att = (att-att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True) * self.att_r + self.att_bias
             # method 5:
             elif '5' in self.att_normalize_method:
@@ -1011,7 +1020,22 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             # method 10:
             elif self.att_normalize_method =='10':
                 att = (att - mean_feat) / l2_weight + mean_feat
-
+            # method t1
+            elif self.att_normalize_method == 't1':
+                att = (att - att.mean(dim=1, keepdim=True)) / att.std(dim=1, keepdim=True)
+                att = self.att_linear_project(att)
+            # method t2
+            elif self.att_normalize_method == 't2':
+                self.att_BN(att)
+                att = (att - self.att_BN.running_mean) / l2_weight
+                att = self.att_linear_project(att)
+            # method t3
+            elif self.att_normalize_method == 't3':
+                att = self.att_BN(att)
+            # method t4
+            elif self.att_normalize_method == 't4':
+                self.att_BN(att)
+                att = (att - self.att_BN.running_mean) / l2_weight + self.att_bias
 
 
         if self.drop_attfeat_location == 'after_attention':
