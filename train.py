@@ -71,6 +71,7 @@ def load_params(model, avg_p_list):
 def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, loader, model, opt, tb_summary_writer):
     original_param = deepcopy(list(p.data for p in model.parameters()))  # save current params
     load_params(model, avg_param)  # load the average
+
     # eval model on training data
     eval_kwargs = {'split': opt.train_eval_split,
                    'dataset': opt.input_json}
@@ -81,9 +82,8 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
     if lang_stats is not None:
         for k, v in lang_stats.items():
             add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
-    # eval model
-    # eval_kwargs = {'split': 'val',
-    #                'dataset': opt.input_json}
+
+    # eval model on valid data
     eval_kwargs = {'split': opt.val_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
@@ -93,6 +93,18 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
     if lang_stats is not None:
         for k, v in lang_stats.items():
             add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
+
+    # eval model on test data
+    eval_kwargs = {'split': opt.test_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write validation result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/test_ave_model', val_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/test_ave_model', v, iteration)
+
     # Save model if is improving on validation result
     if opt.language_eval == 1:
         current_score = lang_stats['CIDEr']
@@ -131,7 +143,8 @@ def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration,
     if lang_stats is not None:
         for k, v in lang_stats.items():
             add_summary_value(tb_summary_writer, k + '/train', v, iteration)
-    # eval model
+
+    # eval model on valid data
     eval_kwargs = {'split': opt.val_split,
                    'dataset': opt.input_json}
     eval_kwargs.update(vars(opt))
@@ -141,17 +154,33 @@ def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration,
     if lang_stats is not None:
         for k, v in lang_stats.items():
             add_summary_value(tb_summary_writer, k + '/val', v, iteration)
+    # val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
+
+    # eval model on test data
+    eval_kwargs = {'split': opt.test_split,
+                   'dataset': opt.input_json}
+    eval_kwargs.update(vars(opt))
+    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+    # Write validation result into summary
+    add_summary_value(tb_summary_writer, 'validation_loss/test', val_loss, iteration)
+    if lang_stats is not None:
+        for k, v in lang_stats.items():
+            add_summary_value(tb_summary_writer, k + '/test', v, iteration)
     val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
+
+
     # Save model if is improving on validation result
     if opt.language_eval == 1:
         current_score = lang_stats['CIDEr']
     else:
         current_score = - val_loss
+
     best_flag = False
     # if True: # if true
     if best_val_score is None or current_score >= best_val_score:
         best_val_score = current_score
         best_flag = True
+
     checkpoint_path = os.path.join(opt.checkpoint_path, 'model.pth')
     torch.save(model.state_dict(), checkpoint_path)
     print("model saved to {}".format(checkpoint_path))
