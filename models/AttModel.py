@@ -87,7 +87,7 @@ class AttModel(CaptionModel):
                                      (nn.Dropout(self.drop_prob_embed),)
                                      ))
         self.fc_embed = nn.Sequential(*(
-                ((nn.BatchNorm1d(self.fc_feat_size),) if opt.fc_use_bn else ()) +
+                ((nn.BatchNorm1d(self.fc_feat_size, momentum=0.02),) if opt.fc_use_bn else ()) +
                 (nn.Linear(self.fc_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if opt.fc_use_bn == 2 else ()) +
@@ -130,7 +130,6 @@ class AttModel(CaptionModel):
             # initialization
             nn.init.normal_(self.project_outputembedding.weight, mean=0, std=(2.0**0.5)/self.rnn_size)
 
-
         if self.LN_out_embedding:
             self.ln_out_embedding = nn.LayerNorm(self.rnn_size)
 
@@ -160,6 +159,10 @@ class AttModel(CaptionModel):
         if self.save_att_statics:
             self.att_feat_dict = {}
 
+        # fc feature normalization
+        self.fc_normalize_method = opt.fc_normalize_method
+        if self.fc_normalize_method == '3':
+            self.fc_BN = nn.BatchNorm1d(self.fc_feat_size, affine=False, momentum=0.02)
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
@@ -187,7 +190,14 @@ class AttModel(CaptionModel):
         att_feats, att_masks = self.clip_att(att_feats, att_masks)
 
         # embed fc and att feats
+        # fc normalization method 3: (attention-running_mean)/l2 + running_mean
+        if self.fc_normalize_method == '3':
+            l2_recip = (att_masks.data.long().sum(1).float())**0.5
+            self.fc_BN(fc_feats)
+            fc_feats = (fc_feats - self.fc_BN.running_mean) * l2_recip.unsqueeze(1) + self.fc_BN.running_mean
         fc_feats = self.fc_embed(fc_feats)
+
+        # embed att feats
         att_feats = pack_wrapper(self.att_embed, att_feats, att_masks)
 
         # Project the attention feats first to reduce memory and computation comsumptions.
