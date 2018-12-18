@@ -864,7 +864,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         if self.att_normalize_method == '2':
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.rnn_size)))
         elif self.att_normalize_method == '3':
-            self.att_BN = nn.BatchNorm1d(self.rnn_size, affine=False)
+            self.att_BN = nn.BatchNorm1d(self.rnn_size, affine=False, momentum=0.01)
         elif self.att_normalize_method == '4-0':
             self.att_r = self.h2_affine.weight.data.new_ones(1).cuda()
             self.att_bias = self.h2_affine.weight.data.new_zeros(1).cuda()
