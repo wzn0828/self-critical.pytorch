@@ -83,6 +83,6 @@ def setup(opt):
             del state_dict['logit.weight']
             del state_dict['logit.bias']
 
-        model.load_state_dict(state_dict, strict=False)
+        model.load_state_dict(state_dict)
 
     return model
