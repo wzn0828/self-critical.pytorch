@@ -1468,7 +1468,7 @@ class TestCore(nn.Module):
             self.outatt_affine = nn.Linear(opt.rnn_size, opt.rnn_size, bias=False)
             model_utils.xavier_normal('linear', self.outatt_affine)
 
-    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None):
+    def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None, mean_feat=None):
         pre_states = state[1:]
         step = len(pre_states)
         if self.LSTMN and step > 0:
