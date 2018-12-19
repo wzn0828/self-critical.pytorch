@@ -2166,6 +2166,9 @@ class NonLocalBlock(nn.Module):
         if self.project_g:
             model_utils.xavier_normal('linear', self.g)
 
+        # normalization
+        self.nonlocal_normalize_method = opt.nonlocal_normalize_method
+
     def forward(self, x):
         '''
         :param x: (batch, (step+1), rnn_size)
@@ -2182,9 +2185,11 @@ class NonLocalBlock(nn.Module):
         f = torch.bmm(phi_x, theta_x).squeeze(1) / (self.inter_size ** 0.5)     # batch*(step+1)
 
         f_div_C = F.softmax(f, dim=1)   # batch * (step+1)
+        z = torch.bmm(f_div_C.unsqueeze(1), g_x).squeeze(1).contiguous()  # batch * inter_size
 
-        f_div_C = f_div_C.unsqueeze(1)  # batch * 1 * (step+1)
-        z = torch.bmm(f_div_C, g_x).squeeze(1).contiguous()  # batch * inter_size
+        if self.nonlocal_normalize_method == '1':
+            l2_weight = f_div_C.norm(p=2, dim=1, keepdim=True)  # batch * 1
+            z = z / l2_weight
 
         if self.residual:
             W_y = self.W(z)             # batch * rnn_size
