@@ -275,13 +275,13 @@ class AttModel(CaptionModel):
 
             att_sentinals.append(state[-1][0])
             lang_sentinals.append(state[-1][1])
-            if i==6:
-                lang_weights.append(lang_weight)
+            # if i==6:
+            lang_weights.append(lang_weight)
 
         # return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
         #     sentinals)
         return outputs, p_fc_feats, p_att_feats, torch.stack(att_hiddens), torch.stack(lan_hiddens), torch.stack(
-            att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights)
+            att_sentinals), torch.stack(lang_sentinals), torch.stack(lang_weights, dim=2)
 
     def get_logprobs_state(self, it, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, att_masks, average_att_feat, state):
         # layer normal output embedding matrix
@@ -697,9 +697,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.input_encoding_size = opt.input_encoding_size
         self.language_attention = opt.language_attention
         self.project_hidden = opt.project_hidden
-        self.add_2_layer_hidden = opt.add_2_layer_hidden
+        self.skip_connection = opt.skip_connection
         self.attention_gate = opt.attention_gate
-        self.directly_add_2_layer = opt.directly_add_2_layer
         self.LSTMN = opt.LSTMN
         self.LSTMN_att = opt.LSTMN_att
         self.LSTMN_lang = opt.LSTMN_lang
@@ -811,7 +810,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.sentinal_embed1 = lambda x: x
             self.sentinel_nonlinear = lambda x: x
 
-        if self.add_2_layer_hidden:
+        if self.skip_connection == 'CAT':
             self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
             self.beta = ((opt.rnn_size + opt.rnn_size)/(2*opt.rnn_size + float(opt.rnn_size)))**0.5
             model_utils.xavier_normal(opt.nonlinear, self.h1_affine)
@@ -823,7 +822,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.h2_affine = lambda x: x
             del self.drop
             self.drop = nn.Dropout(0)
-            if self.add_2_layer_hidden:
+            if self.skip_connection == 'CAT':
                 del self.h1_affine
                 self.h1_affine = lambda x: x
 
@@ -1077,6 +1076,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # --end------second LSTM--------#
 
         # --start-------generate output--------#
+        lang_weights = torch.zeros_like(h2)
         if self.language_attention:
             if self.LSTMN:
                 if self.lang_att_before_pro:
@@ -1113,10 +1113,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined_linear = self.h2_affine(self.drop((h_lang + h_att)/1.4142))
             else:
                 affined_linear = self.h2_affine(self.drop(h_lang))
-            if self.LSTMN:
-                lang_weights = (layer1_weights + layer2_weights)/2.0
-            else:
-                lang_weights = torch.zeros_like(h2)
 
         if self.output_attention:
             att_output, weight2 = self.attention2(h_lang, att_feats, p2_att_feats, att_masks)  # batch_size * rnn_size
@@ -1269,7 +1265,6 @@ class att_normalization(nn.Module):
             self.att_norm_reg_mean_b = nn.Parameter(self.att_norm_reg_mean_b)
             self.att_norm_reg_std_w = nn.Parameter(self.att_norm_reg_std_w)
             self.att_norm_reg_std_b = nn.Parameter(self.att_norm_reg_std_b)
-
 
     def forward(self, l2_weight, attentioned_feat):
         '''
