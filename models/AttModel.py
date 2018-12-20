@@ -925,6 +925,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=False, momentum=0.01)
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.encoded_feat_size)))
 
+        if self.skip_connection == 'HW':
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False)
+        elif self.skip_connection == 'HW-normal':
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=True)
+
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None, mean_feat=None):
         pre_states = state[1:]
@@ -1107,10 +1112,14 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined_linear = self.h2_affine(self.drop(h_lang)) + self.ws_affine(
                         self.drop(weighted_sentinal))  # batch_size * rnn_size
         else:
-            if self.add_2_layer_hidden:
+            if self.skip_connection == 'CAT':
                 affined_linear = self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att))
-            elif self.directly_add_2_layer:
-                affined_linear = self.h2_affine(self.drop((h_lang + h_att)/1.4142))
+            elif self.skip_connection == 'RES':
+                affined_linear = self.h2_affine(self.drop(h_lang + h_att))
+            elif self.skip_connection in ['HW', 'HW-normal']:
+                affined_linear, trans_gate, carry_gate = self.HW_connection(h_att, h_lang)      # batch*rnn_size,batch*1,batch*1
+                affined_linear = self.h2_affine(self.drop(affined_linear))
+                lang_weights = torch.cat((trans_gate, carry_gate), dim=1)      # batch*2
             else:
                 affined_linear = self.h2_affine(self.drop(h_lang))
 
@@ -1244,6 +1253,32 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
     def average_hiddens(self, h_lang, hiddens):
         weighted_sentinal = torch.mean(hiddens, 1)  # batch_size * rnn_size
         return weighted_sentinal
+
+
+class HW_connection(nn.Module):
+    def __init__(self, num_dim, normal=False):
+        super(HW_connection, self).__init__()
+        self.transform_gate = nn.Sequential(nn.Linear(num_dim, 1), nn.Sigmoid())
+        self.carry_gate = nn.Sequential(nn.Linear(num_dim, 1), nn.Sigmoid())
+        self.normal = normal
+
+        #initialization
+        model_utils.xavier_normal('linear', self.transform_gate[0], self.carry_gate[0])
+
+    def forward(self, input_1, input_2):
+        # both inputs' size maybe batch*opt.rnn_size
+        trans_gate = self.transform_gate(input_1)   # batch*1
+        carry_gate = self.carry_gate(input_1)       # batch*1
+
+        if self.normal == True:
+            l2 = torch.cat((trans_gate, carry_gate), dim=1).norm(p=2, dim=1, keepdim=True)  # batch*1
+            trans_gate = trans_gate/l2
+            carry_gate = carry_gate/l2
+
+        output = input_1 * trans_gate + input_2 * carry_gate  # batch*opt.rnn_size
+
+        return output, trans_gate, carry_gate
+
 
 
 class att_normalization(nn.Module):
