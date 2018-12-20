@@ -999,13 +999,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         # compute l2
         if self.att_normalize_method is not None:
             if self.att_normalize_method not in ['4-0', '4-1', '4-2'] and self.att_normalize_method != 't1' and self.att_normalize_method != 't3':
-                batch_size = att_feats.size(0)
-                l2_weight = att_feats.new_ones(batch_size)       # batch_size
-                num_feats = att_masks.sum(dim=1).int()
-                for i in range(batch_size):
-                    l2_weight[i] = weight[i][:num_feats[i]].norm().item()
-                l2_weight = l2_weight*self.att_normalize_rate        # batch_size
-                l2_weight = l2_weight.unsqueeze(1)              # batch_size * 1
+                l2_weight = weight.norm(p=2, dim=1, keepdim=True)       # batch_size * 1
+                l2_weight = l2_weight*self.att_normalize_rate           # batch_size * 1
             # method 1: attention/l2
             if self.att_normalize_method == '1':
                 att = att/l2_weight
