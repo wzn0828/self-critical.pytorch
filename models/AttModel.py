@@ -99,6 +99,10 @@ class AttModel(CaptionModel):
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if self.use_bn == 2 else ()) +
                 ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
+        # initialization
+        nn.init.normal_(self.embed[0].weight, mean=0, std=0.1)
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
+                                   filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
 
         # prepair for normalize
         if self.att_normalize_method == '2' and self.use_bn == 2:
@@ -108,7 +112,7 @@ class AttModel(CaptionModel):
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
             model_utils.kaiming_normal('relu', 0, self.logit)
         else:
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
@@ -121,22 +125,12 @@ class AttModel(CaptionModel):
                                        ))
 
         if self.tie_weights:
-            if self.input_encoding_size != self.rnn_size:
-                raise ValueError('When using the tied flag, input_encoding_size must be equal to rnn_size')
-            del self.logit
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
             self.logit.weight = self.embed[0].weight
-            self.project_outputembedding = nn.Linear(self.rnn_size, self.rnn_size, bias=False)
-            # initialization
-            nn.init.normal_(self.project_outputembedding.weight, mean=0, std=(2.0**0.5)/self.rnn_size)
 
         if self.LN_out_embedding:
             self.ln_out_embedding = nn.LayerNorm(self.rnn_size)
 
         # initialization
-        nn.init.normal_(self.embed[0].weight, mean=0, std=0.2)
-        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
-                                   filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
         model_utils.xavier_normal('tanh', self.ctx2att[0])
         self.beta = ((self.att_hid_size + self.encoded_feat_size) / (float(self.att_hid_size) + self.rnn_size + self.encoded_feat_size)) ** 0.5
         self.ctx2att[0].weight.data = self.ctx2att[0].weight*self.beta
@@ -287,6 +281,9 @@ class AttModel(CaptionModel):
         # layer normal output embedding matrix
         if self.LN_out_embedding:
             self.logit.weight.data = self.ln_out_embedding(self.logit.weight)
+        # # tie weights
+        # if self.tie_weights:
+        #     self.logit.weight.data = self.tie_nonlinear(torch.mm(self.embed[0].weight, self.tie_linear))
 
         # 'it' contains a word index
         xt = self.embed(it)  # [batch_size, input_encoding_size]
