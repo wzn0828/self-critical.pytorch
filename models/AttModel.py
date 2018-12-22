@@ -810,22 +810,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.sentinal_embed1 = lambda x: x
             self.sentinel_nonlinear = lambda x: x
 
-        if self.skip_connection == 'CAT':
-            self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-            self.beta = ((opt.rnn_size + opt.rnn_size)/(2*opt.rnn_size + float(opt.rnn_size)))**0.5
-            model_utils.xavier_normal(opt.nonlinear, self.h1_affine)
-            self.h1_affine.weight.data = self.h1_affine.weight * self.beta
-            self.h2_affine.weight.data = self.h2_affine.weight * self.beta
-
-        if not self.project_hidden:
-            del self.h2_affine
-            self.h2_affine = lambda x: x
-            del self.drop
-            self.drop = nn.Dropout(0)
-            if self.skip_connection == 'CAT':
-                del self.h1_affine
-                self.h1_affine = lambda x: x
-
         if self.attention_gate:
             self.att_gate_1 = nn.Linear(opt.rnn_size + inputsize,
                                              inputsize)
@@ -925,14 +909,27 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=False, momentum=0.01)
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.encoded_feat_size)))
 
-        if self.skip_connection == 'HW':
+        if self.skip_connection is not None and self.skip_connection in ['HW', 'CAT-HW']:
             self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False)
-        elif self.skip_connection == 'HW-normal':
+        elif self.skip_connection is not None and self.skip_connection in ['HW-normal', 'CAT-HW-normal']:
             self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=True)
         elif self.skip_connection == 'HW_1':
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=False)
         elif self.skip_connection == 'HW_1-normal':
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=True)
+
+        if self.skip_connection is not None and self.skip_connection in ['CAT', 'CAT-HW', 'CAT-HW-normal']:
+            self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+            model_utils.xavier_normal(opt.nonlinear, self.h1_affine)
+
+        if not self.project_hidden:
+            del self.h2_affine
+            self.h2_affine = lambda x: x
+            del self.drop
+            self.drop = nn.Dropout(0)
+            if self.skip_connection == 'CAT':
+                del self.h1_affine
+                self.h1_affine = lambda x: x
 
     def forward(self, xt, fc_feats, att_feats, p_att_feats, p0_att_feats, p2_att_feats, state, att_masks=None, std_feat=None, mean_feat=None):
         pre_states = state[1:]
@@ -1049,7 +1046,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.att_BN(att)
                 att = (att - self.att_BN.running_mean) / l2_weight + self.att_bias
 
-
         if self.drop_attfeat_location == 'after_attention':
             att = F.dropout(att, self.drop_prob_attfeat, self.training)
 
@@ -1118,6 +1114,11 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined_linear, trans_gate, carry_gate = self.HW_connection(h_att, h_lang)      # batch*rnn_size,batch*1,batch*1
                 affined_linear = self.h2_affine(self.drop(affined_linear))
                 lang_weights = torch.cat((trans_gate, carry_gate), dim=1)      # batch*2
+            elif self.skip_connection is not None and self.skip_connection in ['CAT-HW', 'CAT-HW-normal']:
+                h_att = self.h1_affine(self.drop(h_att))
+                h_lang = self.h2_affine(self.drop(h_lang))
+                affined_linear, trans_gate, carry_gate = self.HW_connection(h_att, h_lang)
+                lang_weights = torch.cat((trans_gate, carry_gate), dim=1)  # batch*2
             else:
                 affined_linear = self.h2_affine(self.drop(h_lang))
 
