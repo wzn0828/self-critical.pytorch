@@ -100,7 +100,7 @@ class AttModel(CaptionModel):
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if self.use_bn == 2 else ()) +
                 ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
         # initialization
-        nn.init.normal_(self.embed[0].weight, mean=0, std=0.1)
+        nn.init.normal_(self.embed[0].weight, mean=0, std=0.2)
         model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
                                    filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
 
