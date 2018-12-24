@@ -880,7 +880,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.att_linear_project = Linear_Project(self.encoded_feat_size, has_bias=True)
             else:
                 self.att_linear_project = lambda x: x
-
         elif self.att_normalize_method is not None and '6' in self.att_normalize_method:
             self.att_normalize_rate = 1
             self.att_norm = att_normalization(opt)
@@ -906,14 +905,15 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.att_BN = nn.BatchNorm1d(self.encoded_feat_size, affine=False, momentum=0.01)
             self.att_bias = nn.Parameter(self.h2_affine.weight.data.new_zeros((1, self.encoded_feat_size)))
 
+        # skip connection
         if self.skip_connection is not None and self.skip_connection in ['HW', 'CAT-HW']:
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False)
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele)
         elif self.skip_connection is not None and self.skip_connection in ['HW-normal', 'CAT-HW-normal']:
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=True)
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=True, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1':
-            self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=False)
+            self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1-normal':
-            self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=True)
+            self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=True, ele=opt.skip_ele)
 
         if self.skip_connection is not None and self.skip_connection in ['CAT', 'CAT-HW', 'CAT-HW-normal']:
             self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
@@ -1252,26 +1252,35 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
 
 class HW_connection(nn.Module):
-    def __init__(self, num_dim, normal=False):
+    def __init__(self, num_dim, normal=False, ele=False):
         super(HW_connection, self).__init__()
-        self.transform_gate = nn.Sequential(nn.Linear(num_dim, 1), nn.Sigmoid())
-        self.carry_gate = nn.Sequential(nn.Linear(num_dim, 1), nn.Sigmoid())
         self.normal = normal
+        self.ele = ele
+        if self.ele:
+            self.out_dim = num_dim
+        else:
+            self.out_dim = 1
+
+        self.transform_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), nn.Sigmoid())
+        self.carry_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), nn.Sigmoid())
 
         #initialization
         model_utils.xavier_normal('linear', self.transform_gate[0], self.carry_gate[0])
 
     def forward(self, input_1, input_2):
         # both inputs' size maybe batch*opt.rnn_size
-        trans_gate = self.transform_gate(input_1)   # batch*1
-        carry_gate = self.carry_gate(input_1)       # batch*1
+        trans_gate = self.transform_gate(input_1)   # batch*rnn_size or batch*1
+        carry_gate = self.carry_gate(input_1)       # batch*rnn_size or batch*1
 
         if self.normal == True:
-            l2 = torch.cat((trans_gate, carry_gate), dim=1).norm(p=2, dim=1, keepdim=True)  # batch*1
+            l2 = torch.stack([trans_gate, carry_gate], dim=2).norm(p=2, dim=2, keepdim=False)
             trans_gate = trans_gate/l2
             carry_gate = carry_gate/l2
 
         output = input_1 * trans_gate + input_2 * carry_gate  # batch*opt.rnn_size
+
+        trans_gate = trans_gate.mean(dim=1, keepdim=True)
+        carry_gate = carry_gate.mean(dim=1, keepdim=True)
 
         return output, trans_gate, carry_gate
 
@@ -1282,29 +1291,37 @@ class HW_1_connection(nn.Module):
     rather than just use input1
     '''
 
-    def __init__(self, num_dim, normal=False):
+    def __init__(self, num_dim, normal=False, ele=False):
         super(HW_1_connection, self).__init__()
-        self.transform_gate = nn.Sequential(nn.Linear(2 * num_dim, num_dim), nn.Tanh(), nn.Linear(num_dim, 1),
-                                            nn.Sigmoid())
-        self.carry_gate = nn.Sequential(nn.Linear(2 * num_dim, num_dim), nn.Tanh(), nn.Linear(num_dim, 1), nn.Sigmoid())
         self.normal = normal
+        self.ele = ele
+        if self.ele:
+            self.out_dim = num_dim
+        else:
+            self.out_dim = 1
+
+        self.transform_gate = nn.Sequential(nn.Linear(2 * num_dim, self.out_dim), nn.Sigmoid())
+        self.carry_gate = nn.Sequential(nn.Linear(2 * num_dim, self.out_dim), nn.Sigmoid())
 
         # initialization
         model_utils.xavier_normal('linear', self.transform_gate[0], self.carry_gate[0])
-        model_utils.xavier_normal('tanh', self.transform_gate[2], self.carry_gate[2])
 
     def forward(self, input_1, input_2):
         # both inputs' size maybe batch*opt.rnn_size
         input = torch.cat((input_1, input_2), dim=1)    # batch*(2*opt.rnn_size)
-        trans_gate = self.transform_gate(input)         # batch*1
-        carry_gate = self.carry_gate(input)             # batch*1
+
+        trans_gate = self.transform_gate(input)         # batch*rnn_size or batch*1
+        carry_gate = self.carry_gate(input)             # batch*rnn_size or batch*1
 
         if self.normal == True:
-            l2 = torch.cat((trans_gate, carry_gate), dim=1).norm(p=2, dim=1, keepdim=True)  # batch*1
+            l2 = torch.stack([trans_gate, carry_gate], dim=2).norm(p=2, dim=2, keepdim=False)   # batch*rnn_size or batch*1
             trans_gate = trans_gate / l2
             carry_gate = carry_gate / l2
 
         output = input_1 * trans_gate + input_2 * carry_gate  # batch*opt.rnn_size
+
+        trans_gate = trans_gate.mean(dim=1, keepdim=True)
+        carry_gate = carry_gate.mean(dim=1, keepdim=True)
 
         return output, trans_gate, carry_gate
 
