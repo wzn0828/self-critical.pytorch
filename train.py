@@ -286,14 +286,19 @@ def train(opt):
         if update_lr_flag:
             # Assign the learning rate
             if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
-                frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
-                decay_factor = opt.learning_rate_decay_rate ** frac
-                opt.current_lr = opt.learning_rate * decay_factor
+                if opt.lr_decay == 'exp':
+                    frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
+                    decay_factor = opt.learning_rate_decay_rate ** frac
+                    opt.current_lr = opt.learning_rate * decay_factor
+                elif opt.lr_decay == 'cosine':
+                    opt.current_lr = opt.learning_rate * (1 + math.cos(math.pi * epoch / opt.lr_max_epoch)) / 2
             else:
                 opt.current_lr = opt.learning_rate
+
             lr = [opt.current_lr]
             if opt.att_normalize_method is not None and '6' in opt.att_normalize_method:
                 lr = [opt.current_lr, opt.lr_ratio*opt.current_lr]
+
             utils.set_lr(optimizer, lr)
             print('learning rate is: ' + str(lr))
 
@@ -312,18 +317,11 @@ def train(opt):
 
             update_lr_flag = False
 
-        # opt.current_lr = opt.learning_rate * ((1 - float(iteration) / opt.max_iter) ** opt.power)
-        # utils.set_lr(optimizer, opt.current_lr)
-
         # Update the iteration
         iteration += 1
-                
-        start = time.time()
+
         # Load data from train split (0)
-        # data = loader.get_batch('train')
-        # data = loader.get_batch('raw_train')
         data = loader.get_batch(opt.train_split)
-        # print('Read data:', time.time() - start)
 
         torch.cuda.synchronize()
         start = time.time()
