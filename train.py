@@ -283,6 +283,13 @@ def train(opt):
     avg_param = deepcopy(list(p.data for p in model.parameters()))
 
     while True:
+        # learning rate warm up
+        if opt.lr_warmup is not None and iteration <= opt.lr_warmup:
+            opt.current_lr = opt.learning_rate * iteration / opt.lr_warmup
+            lr = [opt.current_lr]
+            utils.set_lr(optimizer, lr)
+            print('learning rate is: ' + str(lr))
+
         if update_lr_flag:
             # Assign the learning rate
             if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
@@ -292,7 +299,7 @@ def train(opt):
                     opt.current_lr = opt.learning_rate * decay_factor
                 elif opt.lr_decay == 'cosine':
                     opt.current_lr = opt.learning_rate * (1 + math.cos(math.pi * epoch / opt.lr_max_epoch)) / 2
-            else:
+            elif epoch != 0:
                 opt.current_lr = opt.learning_rate
 
             lr = [opt.current_lr]
