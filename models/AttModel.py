@@ -112,7 +112,7 @@ class AttModel(CaptionModel):
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1, bias=False)
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
             model_utils.kaiming_normal('relu', 0, self.logit)
         else:
             self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
