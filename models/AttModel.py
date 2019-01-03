@@ -914,6 +914,9 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1-normal':
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=True, ele=opt.skip_ele)
+        elif self.skip_connection == 'HW-softmax':
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele,
+                                               skip_sum_1=opt.skip_sum_1, nonlinear=nn.Softmax(dim=1))
 
         if self.skip_connection is not None and self.skip_connection in ['CAT', 'CAT-HW', 'CAT-HW-normal']:
             self.h1_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
@@ -1107,7 +1110,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 affined_linear = self.h2_affine(self.drop(h_lang)) + self.h1_affine(self.drop(h_att))
             elif self.skip_connection == 'RES':
                 affined_linear = self.h2_affine(self.drop(h_lang + h_att))
-            elif self.skip_connection is not None and self.skip_connection in ['HW', 'HW-normal', 'HW_1', 'HW_1-normal']:
+            elif self.skip_connection is not None and self.skip_connection in ['HW', 'HW-normal', 'HW_1', 'HW_1-normal', 'HW-softmax']:
                 affined_linear, trans_gate, carry_gate = self.HW_connection(h_att, h_lang)      # batch*rnn_size,batch*1,batch*1
                 affined_linear = self.h2_affine(self.drop(affined_linear))
                 lang_weights = torch.cat((trans_gate, carry_gate), dim=1)      # batch*2
