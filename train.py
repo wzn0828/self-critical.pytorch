@@ -250,6 +250,8 @@ def train(opt):
     epoch = infos.get('epoch', 0)
     # if opt.load_best:
     #     opt.self_critical_after = epoch
+    if opt.self_critical_after != -1 and epoch >= opt.self_critical_after:
+        opt.learning_rate_decay_start = epoch
 
     val_result_history = histories.get('val_result_history', {})
     loss_history = histories.get('loss_history', {})
