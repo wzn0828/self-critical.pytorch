@@ -1255,25 +1255,32 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
 
 class HW_connection(nn.Module):
-    def __init__(self, num_dim, normal=False, ele=False):
+    def __init__(self, num_dim, normal=False, ele=False, skip_sum_1=False, nonlinear=nn.Sigmoid()):
         super(HW_connection, self).__init__()
         self.normal = normal
         self.ele = ele
+        self.skip_sum_1 = skip_sum_1
+        self.nonlinear = nonlinear
         if self.ele:
             self.out_dim = num_dim
         else:
             self.out_dim = 1
 
-        self.transform_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), nn.Sigmoid())
-        self.carry_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), nn.Sigmoid())
-
-        #initialization
-        model_utils.xavier_normal('linear', self.transform_gate[0], self.carry_gate[0])
+        self.transform_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), self.nonlinear)
+        # initialization
+        model_utils.xavier_normal('linear', self.transform_gate[0])
+        if not self.skip_sum_1:
+            self.carry_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), self.nonlinear)
+            #initialization
+            model_utils.xavier_normal('linear', self.carry_gate[0])
 
     def forward(self, input_1, input_2):
         # both inputs' size maybe batch*opt.rnn_size
         trans_gate = self.transform_gate(input_1)   # batch*rnn_size or batch*1
-        carry_gate = self.carry_gate(input_1)       # batch*rnn_size or batch*1
+        if self.skip_sum_1:
+            carry_gate = 1 - trans_gate
+        else:
+            carry_gate = self.carry_gate(input_1)       # batch*rnn_size or batch*1
 
         if self.normal == True:
             l2 = torch.stack([trans_gate, carry_gate], dim=2).norm(p=2, dim=2, keepdim=False)
