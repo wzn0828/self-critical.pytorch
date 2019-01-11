@@ -52,15 +52,18 @@ class RewardCriterion(nn.Module):
         return output
 
 class LanguageModelCriterion(nn.Module):
-    def __init__(self):
+    def __init__(self, XE_eps=0):
         super(LanguageModelCriterion, self).__init__()
+        self.XE_eps = XE_eps
 
     def forward(self, input, target, mask):     # input: batch*17*(vocab_size+1)
         # truncate to the same size
         target = target[:, :input.size(1)]      # batch*17
         mask =  mask[:, :input.size(1)]     # batch*17
 
-        output = -input.gather(2, target.unsqueeze(2)).squeeze(2) * mask    # batch*17
+        label_log_prob = input.gather(2, target.unsqueeze(2)).squeeze(2)
+        other_log_prob = input.sum(dim=2) - label_log_prob
+        output = -((1.0 - self.XE_eps) * label_log_prob + self.XE_eps / (input.size(2) - 1) * other_log_prob) * mask      # batch*17
         output = torch.sum(output) / torch.sum(mask)    # scalar
 
         return output

@@ -129,7 +129,7 @@ for i in range(len(model_infos)):
 model = AttEnsemble(_models)
 model.seq_length = opt.seq_length
 model.eval()
-crit = utils.LanguageModelCriterion()
+crit = utils.LanguageModelCriterion(opt.XE_eps)
 
 # Create the Data Loader instance
 if len(opt.image_folder) == 0:

@@ -271,7 +271,7 @@ def train(opt):
     # Assure in training mode
     dp_model.train()
 
-    crit = utils.LanguageModelCriterion()
+    crit = utils.LanguageModelCriterion(opt.XE_eps)
     rl_crit = utils.RewardCriterion()
 
     # build_optimizer
