@@ -744,7 +744,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             self.intra_att_lang_lstm = IntraAttention(opt, input_second_att_size, opt.LSTMN_lang_att_score_method)
 
         ### --- visual attention --- ###
-        self.attention = Attention(opt)
+        self.attention = Attention(opt, opt.visatt_RMSfilter)
 
         if opt.weighted_hidden:
             self.sen_attention = SentinalAttention(opt)
@@ -1806,11 +1806,11 @@ class DenseAttCore(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, opt, visatt_RMSfilter=False):
         super(Attention, self).__init__()
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
-        self.visatt_RMSfilter = opt.visatt_RMSfilter
+        self.visatt_RMSfilter = visatt_RMSfilter
 
         self.h2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) + (
             (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
