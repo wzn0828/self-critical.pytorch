@@ -1811,6 +1811,7 @@ class Attention(nn.Module):
         self.rnn_size = opt.rnn_size
         self.att_hid_size = opt.att_hid_size
         self.visatt_RMSfilter = visatt_RMSfilter
+        self.visatt_RMSfilter_sum1 = opt.visatt_RMSfilter_sum1
 
         self.h2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) + (
             (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
@@ -1844,7 +1845,8 @@ class Attention(nn.Module):
             weight_RMS = weight.norm(p=2, dim=1, keepdim=True) / ((att_masks.sum(dim=1, keepdim=True)) ** (1.0 / 2))
             weight_masks = weight >= weight_RMS
             weight = weight * weight_masks.float()
-            weight = weight / weight.sum(1, keepdim=True)
+            if self.visatt_RMSfilter_sum1:
+                weight = weight / weight.sum(1, keepdim=True)
 
         att_feats_ = att_feats.view(-1, att_size, att_feats.size(-1))  # batch * att_size * rnn_size
         att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1)  # batch * rnn_size
