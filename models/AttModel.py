@@ -23,6 +23,8 @@ import torch.nn.functional as F
 from torch.nn import init
 import misc.utils as utils
 from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
+import math
+from torch.nn.parameter import Parameter
 from models import model_utils
 from .CaptionModel import CaptionModel
 import random
@@ -157,6 +159,10 @@ class AttModel(CaptionModel):
         self.fc_normalize_method = opt.fc_normalize_method
         if self.fc_normalize_method == '3':
             self.fc_BN = nn.BatchNorm1d(self.fc_feat_size, affine=False, momentum=0.02)
+
+        if opt.cappro:
+            del self.logit
+            self.logit = LinearCapsPro(self.rnn_size, self.vocab_size + 1, opt.cappro_dim)
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
@@ -2502,3 +2508,39 @@ class Att2inModel(AttModel):
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.logit.bias.data.fill_(0)
         self.logit.weight.data.uniform_(-initrange, initrange)
+
+class LinearCapsPro(nn.Module):
+    def __init__(self, in_features, num_C, num_D, eps=0.0001):
+        super(LinearCapsPro, self).__init__()
+        self.in_features = in_features
+        self.num_C = num_C
+        self.num_D = num_D
+        self.eps = eps
+        self.eye = self.eps * torch.eye(self.num_D).cuda()
+        self.weight = Parameter(torch.Tensor(num_C * num_D, in_features))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+
+    def forward(self, x):
+        weight_caps = self.weight[:self.num_D]
+        sigma = torch.inverse(torch.mm(weight_caps, torch.t(weight_caps)) + self.eye)
+        sigma = torch.unsqueeze(sigma, dim=0)
+        for ii in range(1, self.num_C):
+            weight_caps = self.weight[ii * self.num_D:(ii + 1) * self.num_D]
+            sigma_ = torch.inverse(torch.mm(weight_caps, torch.t(weight_caps)) + self.eye)
+            sigma_ = torch.unsqueeze(sigma_, dim=0)
+            sigma = torch.cat((sigma, sigma_))
+
+        out = torch.matmul(x, torch.t(self.weight))
+        out = out.view(out.shape[0], self.num_C, 1, self.num_D)
+        out = torch.matmul(out, sigma)
+        out = torch.matmul(out, self.weight.view(self.num_C, self.num_D, self.in_features))
+        out = torch.squeeze(out, dim=2)
+        out = torch.matmul(out, torch.unsqueeze(x, dim=2))
+        out = torch.squeeze(out, dim=2)
+
+        return torch.sqrt(out)
