@@ -2531,7 +2531,7 @@ class LinearCapsPro(nn.Module):
         if self.cappro_method == 'max-pro':
             out = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
             out = out / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
-        elif self.cappro_method in ['max-dis', 'min-dis-neg', 'min-dis-rec']:
+        elif self.cappro_method in ['max-dis', 'min-dis']:
             x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)      # batch*1
             xw_pow2 = (torch.matmul(x, torch.t(self.weight))).pow(2)     # batch*num_classes
             w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))      # 1*num_classes
@@ -2541,10 +2541,8 @@ class LinearCapsPro(nn.Module):
 
             out = torch.sqrt(F.relu(x_len_pow2 - xw_pow2 / w_len_pow2))
 
-            if self.cappro_method == 'min-dis-neg':
+            if self.cappro_method == 'min-dis':
                 out = 0. - out
-            elif self.cappro_method == 'min-dis-rec':
-                out = torch.reciprocal(out)
 
         return out
 
