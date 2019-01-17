@@ -162,7 +162,7 @@ class AttModel(CaptionModel):
 
         if opt.cappro:
             del self.logit
-            self.logit = LinearCapsPro(self.rnn_size, self.vocab_size + 1)
+            self.logit = LinearCapsPro(opt, self.rnn_size, self.vocab_size + 1)
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
@@ -2510,7 +2510,7 @@ class Att2inModel(AttModel):
         self.logit.weight.data.uniform_(-initrange, initrange)
 
 class LinearCapsPro(nn.Module):
-    def __init__(self, in_features, num_C, eps=0.0001):
+    def __init__(self, opt, in_features, num_C, eps=0.0001):
         super(LinearCapsPro, self).__init__()
         self.in_features = in_features
         self.num_C = num_C
@@ -2519,13 +2519,34 @@ class LinearCapsPro(nn.Module):
         self.eye = self.eps * torch.eye(self.num_D).cuda()
         self.weight = Parameter(torch.Tensor(self.num_C * self.num_D, in_features))
 
+        self.opt = opt
+        self.cappro_method = opt.cappro_method
+
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.kaiming_normal_(self.weight, mode='fan_in', nonlinearity='relu')
 
     def forward(self, x):
-        out = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
-        out = out / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
+        if self.cappro_method == 'max-pro':
+            out = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
+            out = out / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
+        elif self.cappro_method in ['max-dis', 'min-dis-neg', 'min-dis-rec']:
+            x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)      # batch*1
+            xw_pow2 = (torch.matmul(x, torch.t(self.weight))).pow(2)     # batch*num_classes
+            w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))      # 1*num_classes
+
+            if self.training:
+                x_len_pow2 = x_len_pow2 * (1.0 - self.opt.drop_prob_output)
+
+            out = torch.sqrt(F.relu(x_len_pow2 - xw_pow2 / w_len_pow2))
+
+            if self.cappro_method == 'min-dis-neg':
+                out = 0. - out
+            elif self.cappro_method == 'min-dis-rec':
+                out = torch.reciprocal(out)
 
         return out
+
+
+
