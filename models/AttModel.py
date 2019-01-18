@@ -2528,10 +2528,13 @@ class LinearCapsPro(nn.Module):
         nn.init.kaiming_normal_(self.weight, mode='fan_in', nonlinearity='relu')
 
     def forward(self, x):
-        if self.cappro_method == 'max-pro':
-            out = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
-            out = out / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
-        elif self.cappro_method in ['max-dis', 'min-dis']:
+        if self.cappro_method in ['max-pro', 'max-pro-min-dis']:
+            pro = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
+            pro = pro / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
+        else:
+            pro = 0
+
+        if self.cappro_method in ['max-dis', 'min-dis', 'max-pro-min-dis']:
             x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)      # batch*1
             xw_pow2 = (torch.matmul(x, torch.t(self.weight))).pow(2)     # batch*num_classes
             w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))      # 1*num_classes
@@ -2539,12 +2542,15 @@ class LinearCapsPro(nn.Module):
             if self.training:
                 x_len_pow2 = x_len_pow2 * (1.0 - self.opt.drop_prob_output)
 
-            out = torch.sqrt(F.relu(x_len_pow2 - xw_pow2 / w_len_pow2))
+            dis = torch.sqrt(F.relu(x_len_pow2 - xw_pow2 / w_len_pow2))
 
-            if self.cappro_method == 'min-dis':
-                out = 0. - out
+            if self.cappro_method == 'max-dis':
+                return dis
 
-        return out
+        else:
+            dis = 0
+
+        return pro-dis
 
 
 
