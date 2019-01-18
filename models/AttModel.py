@@ -2520,6 +2520,7 @@ class LinearCapsPro(nn.Module):
         self.weight = Parameter(torch.Tensor(self.num_C * self.num_D, in_features))
 
         self.opt = opt
+        self.cappro_normal = opt.cappro_normal
         self.cappro_method = opt.cappro_method
 
         self.reset_parameters()
@@ -2528,24 +2529,24 @@ class LinearCapsPro(nn.Module):
         nn.init.kaiming_normal_(self.weight, mode='fan_in', nonlinearity='relu')
 
     def forward(self, x):
-        if self.cappro_method in ['max-pro', 'max-pro-min-dis']:
-            pro = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
-            pro = pro / torch.t(self.weight.norm(p=2, dim=1, keepdim=True))
+        wx = torch.matmul(x, torch.t(self.weight))          # batch*num_classes
+        w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))  # 1*num_classes
+        if self.cappro_method in ['pro', 'pro-dis']:
+            pro = wx                                                # batch*num_classes
+            if self.cappro_normal:
+                pro = pro / torch.sqrt(w_len_pow2)
         else:
             pro = 0
 
-        if self.cappro_method in ['max-dis', 'min-dis', 'max-pro-min-dis']:
+        if self.cappro_method in ['dis', 'pro-dis']:
             x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)      # batch*1
-            xw_pow2 = (torch.matmul(x, torch.t(self.weight))).pow(2)     # batch*num_classes
-            w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))      # 1*num_classes
+            wx_pow2 = wx.pow(2)     # batch*num_classes
 
             if self.training:
                 x_len_pow2 = x_len_pow2 * (1.0 - self.opt.drop_prob_output)
 
-            dis = torch.sqrt(F.relu(x_len_pow2 - xw_pow2 / w_len_pow2))
-
-            if self.cappro_method == 'max-dis':
-                return dis
+            dis = torch.sqrt(F.relu(x_len_pow2 - wx_pow2 / w_len_pow2))         # batch*num_classes
+            dis = torch.sign(wx)*(dis - torch.sqrt(x_len_pow2))                 # batch*num_classes
 
         else:
             dis = 0
