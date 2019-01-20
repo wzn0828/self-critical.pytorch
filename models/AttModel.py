@@ -2520,8 +2520,8 @@ class LinearCapsPro(nn.Module):
         self.weight = Parameter(torch.Tensor(self.num_C * self.num_D, in_features))
 
         self.opt = opt
-        self.cappro_pro_normal = opt.cappro_pro_normal
-        self.cappro_dis_normal = opt.cappro_dis_normal
+        self.cappro_pro_mul_w = opt.cappro_pro_mul_w
+        self.cappro_dis_mul_w = opt.cappro_dis_mul_w
         self.cappro_method = opt.cappro_method
 
         self.reset_parameters()
@@ -2534,7 +2534,7 @@ class LinearCapsPro(nn.Module):
         w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))  # 1*num_classes
         if self.cappro_method in ['pro', 'pro-dis']:
             pro = wx                                                # batch*num_classes
-            if self.cappro_pro_normal:
+            if not self.cappro_pro_mul_w:
                 pro = pro / torch.sqrt(w_len_pow2)
         else:
             pro = 0
@@ -2549,7 +2549,7 @@ class LinearCapsPro(nn.Module):
             dis = torch.sqrt(F.relu(x_len_pow2 - wx_pow2 / w_len_pow2))         # batch*num_classes
             dis = torch.sign(wx)*(dis - torch.sqrt(x_len_pow2))                 # batch*num_classes
 
-            if not self.cappro_dis_normal:
+            if self.cappro_dis_mul_w:
                 dis = dis * torch.sqrt(w_len_pow2)
 
         else:
