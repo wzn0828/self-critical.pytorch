@@ -90,21 +90,21 @@ class AttModel(CaptionModel):
                                      ))
         self.fc_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.fc_feat_size, momentum=0.02),) if opt.fc_use_bn else ()) +
-                (nn.Linear(self.fc_feat_size, self.encoded_feat_size),
+                (nn.Linear(self.fc_feat_size, self.encoded_feat_size) if not opt.linearprodis else LinearProDis(self.fc_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if opt.fc_use_bn == 2 else ()) +
                 (nn.Dropout(self.drop_prob_fcfeat),)))
 
         self.att_embed = nn.Sequential(*(
                 ((nn.BatchNorm1d(self.att_feat_size),) if self.use_bn else ()) +
-                (nn.Linear(self.att_feat_size, self.encoded_feat_size),
+                (nn.Linear(self.att_feat_size, self.encoded_feat_size) if not opt.linearprodis else LinearProDis(self.att_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if self.use_bn == 2 else ()) +
                 ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
         # initialization
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.2)
-        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'linear' in str(type(x)), self.fc_embed)[0],
-                                   filter(lambda x: 'linear' in str(type(x)), self.att_embed)[0])
+        model_utils.kaiming_normal('relu', 0, filter(lambda x: 'Linear' in str(type(x)), self.fc_embed)[0],
+                                   filter(lambda x: 'Linear' in str(type(x)), self.att_embed)[0])
 
         # prepair for normalize
         if self.att_normalize_method == '2' and self.use_bn == 2:
@@ -114,15 +114,15 @@ class AttModel(CaptionModel):
 
         self.logit_layers = getattr(opt, 'logit_layers', 1)
         if self.logit_layers == 1:
-            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1)
+            self.logit = nn.Linear(self.rnn_size, self.vocab_size + 1) if not opt.linearprodis else LinearProDis(self.rnn_size, self.vocab_size + 1, drop_p=opt.drop_prob_output)
             model_utils.kaiming_normal('relu', 0, self.logit)
         else:
-            self.logit = [[nn.Linear(self.rnn_size, self.rnn_size), nn.ReLU(), nn.Dropout(0.5)] for _ in
+            self.logit = [[nn.Linear(self.rnn_size, self.rnn_size) if not opt.linearprodis else LinearProDis(self.rnn_size, self.rnn_size, drop_p=0.5), nn.ReLU(), nn.Dropout(0.5)] for _ in
                           range(opt.logit_layers - 1)]
             self.logit = nn.Sequential(
-                *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1)]))
+                *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1) if not opt.linearprodis else LinearProDis(self.rnn_size, self.vocab_size + 1, drop_p=0.5)]))
 
-        self.ctx2att = nn.Sequential(*((nn.Linear(self.encoded_feat_size, self.att_hid_size),) +
+        self.ctx2att = nn.Sequential(*((nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0),) +
                                        ((nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())
                                        ))
 
@@ -147,8 +147,8 @@ class AttModel(CaptionModel):
             nn.init.normal_(self.h2t0, mean=0, std=0.1)
             nn.init.normal_(self.c2t0, mean=0, std=0.1)
 
-        self.ctx2att0 = nn.Linear(self.encoded_feat_size, self.att_hid_size)
-        self.ctx2att2 = nn.Linear(self.encoded_feat_size, self.att_hid_size)
+        self.ctx2att0 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0)
+        self.ctx2att2 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0)
         model_utils.xavier_normal('linear', self.ctx2att0, self.ctx2att2)
 
         self.save_att_statics = opt.save_att_statics
@@ -728,8 +728,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             inputsize = opt.input_encoding_size + opt.rnn_size + opt.encoded_feat_size
 
         if self.lstm_layer_norm:
-            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
-            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
+            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, opt, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
+            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, opt, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
         else:
             self.att_lstm = nn.LSTMCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
             self.lang_lstm = nn.LSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size)  # h^1_t, \hat v
@@ -763,8 +763,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.sentinal_embed2 = lambda x: x
 
         # output
-        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
-        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size)
+        self.h2_affine = nn.Linear(opt.rnn_size, opt.rnn_size) if not opt.linearprodis else LinearProDis(opt.rnn_size, opt.rnn_size, drop_p=self.drop_prob_rnn2)
+        self.ws_affine = nn.Linear(opt.rnn_size, opt.rnn_size) if not opt.linearprodis else LinearProDis(opt.rnn_size, opt.rnn_size, drop_p=self.drop_prob_rnn2)
         self.drop = nn.Dropout(self.drop_prob_rnn2)
 
         if opt.nonlinear == 'relu':
@@ -778,8 +778,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             model_utils.xavier_normal('tanh', self.h2_affine, self.ws_affine)
         elif opt.nonlinear == 'maxout':
             del self.h2_affine, self.ws_affine
-            self.h2_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size)
-            self.ws_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size)
+            self.h2_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size) if not opt.linearprodis else LinearProDis(opt.rnn_size, 2 * opt.rnn_size, drop_p=self.drop_prob_rnn2)
+            self.ws_affine = nn.Linear(opt.rnn_size, 2 * opt.rnn_size) if not opt.linearprodis else LinearProDis(opt.rnn_size, 2 * opt.rnn_size, drop_p=self.drop_prob_rnn2)
             self.tgh = lambda x: torch.max(x.narrow(1, 0, self.rnn_size),
                                            x.narrow(1, self.rnn_size, self.rnn_size))
             model_utils.xavier_normal('linear', self.h2_affine, self.ws_affine)
@@ -913,15 +913,15 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # skip connection
         if self.skip_connection is not None and self.skip_connection in ['HW', 'CAT-HW']:
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele)
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=False, ele=opt.skip_ele)
         elif self.skip_connection is not None and self.skip_connection in ['HW-normal', 'CAT-HW-normal']:
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=True, ele=opt.skip_ele)
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=True, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1':
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1-normal':
             self.HW_connection = HW_1_connection(num_dim=self.rnn_size, normal=True, ele=opt.skip_ele)
         elif self.skip_connection == 'HW-softmax':
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, normal=False, ele=opt.skip_ele,
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=False, ele=opt.skip_ele,
                                                skip_sum_1=opt.skip_sum_1, nonlinear=nn.Softmax(dim=1))
 
         if self.skip_connection is not None and self.skip_connection in ['CAT', 'CAT-HW', 'CAT-HW-normal']:
@@ -1261,7 +1261,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
 
 class HW_connection(nn.Module):
-    def __init__(self, num_dim, normal=False, ele=False, skip_sum_1=False, nonlinear=nn.Sigmoid()):
+    def __init__(self, num_dim, opt, normal=False, ele=False, skip_sum_1=False, nonlinear=nn.Sigmoid()):
         super(HW_connection, self).__init__()
         self.normal = normal
         self.ele = ele
@@ -1272,11 +1272,11 @@ class HW_connection(nn.Module):
         else:
             self.out_dim = 1
 
-        self.transform_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), self.nonlinear)
+        self.transform_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim) if not opt.linearprodis else LinearProDis(num_dim, self.out_dim), self.nonlinear)
         # initialization
         model_utils.xavier_normal('linear', self.transform_gate[0])
         if not self.skip_sum_1:
-            self.carry_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim), self.nonlinear)
+            self.carry_gate = nn.Sequential(nn.Linear(num_dim, self.out_dim) if not opt.linearprodis else LinearProDis(num_dim, self.out_dim), self.nonlinear)
             #initialization
             model_utils.xavier_normal('linear', self.carry_gate[0])
 
@@ -1819,9 +1819,9 @@ class Attention(nn.Module):
         self.visatt_RMSfilter = visatt_RMSfilter
         self.visatt_RMSfilter_sum1 = opt.visatt_RMSfilter_sum1
 
-        self.h2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size),) + (
+        self.h2att = nn.Sequential(*((nn.Linear(self.rnn_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.rnn_size, self.att_hid_size),) + (
             (nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())))
-        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False)
+        self.alpha_net = nn.Linear(self.att_hid_size, 1, bias=False) if not opt.linearprodis else LinearProDis(self.att_hid_size, 1, bias=False)
 
         # initialization
         self.beta = ((self.att_hid_size + self.rnn_size) / (float(self.att_hid_size) + 2 * self.rnn_size)) ** 0.5
@@ -2573,7 +2573,7 @@ class LinearProDis(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        init.xavier_normal(self.weight)
+        init.xavier_normal_(self.weight)
         if self.bias is not None:
             self.bias.data.fill_(0.0)
 
