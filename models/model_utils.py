@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn import Parameter
 import torch.nn.functional as F
+import AttModel
 
 #-----model initialization-----#
 def xavier_uniform(nonlinearity='linear', *modules):
@@ -80,7 +81,7 @@ def lstm_init(lstm_Module):
 
 
 class LayerNormLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
+    def __init__(self, input_size, hidden_size, opt, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
         super(LayerNormLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -89,11 +90,13 @@ class LayerNormLSTMCell(nn.Module):
         self.norm_output = norm_output
         self.norm_hidden = norm_hidden
 
-        self.weight_ih = Parameter(torch.Tensor(4 * hidden_size, input_size))
-        self.weight_hh = Parameter(torch.Tensor(4 * hidden_size, hidden_size))
+        self.ih_linear = nn.Linear(input_size, 4 * hidden_size) if not opt.linearprodis else AttModel.LinearProDis(input_size, 4 * hidden_size, drop_p=opt.drop_prob_fcfeat)
+        self.hh_linear = nn.Linear(hidden_size, 4 * hidden_size) if not opt.linearprodis else AttModel.LinearProDis(hidden_size, 4 * hidden_size, drop_p=opt.drop_prob_attfeat)
 
-        self.bias_ih = Parameter(torch.Tensor(4 * hidden_size))
-        self.bias_hh = Parameter(torch.Tensor(4 * hidden_size))
+        self.weight_ih = self.ih_linear.weight
+        self.weight_hh = self.hh_linear.weight
+        self.bias_ih = self.ih_linear.bias
+        self.bias_hh = self.hh_linear.bias
 
         if self.layer_norm:
             if self.norm_input:
@@ -117,7 +120,7 @@ class LayerNormLSTMCell(nn.Module):
 
     def forward(self, input, hidden):
         hx, cx = hidden
-        gates = self.ln_ih(F.linear(input, self.weight_ih)) + self.ln_hh(F.linear(hx, self.weight_hh)) + self.bias_ih + self.bias_hh
+        gates = self.ln_ih(self.ih_linear(input)) + self.ln_hh(self.hh_linear(hx))
 
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
