@@ -2558,4 +2558,48 @@ class LinearCapsPro(nn.Module):
         return pro-dis
 
 
+class LinearProDis(nn.Module):
+    def __init__(self, in_features, out_features, bias=True, drop_p=0.0):
+        super(LinearProDis, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.drop_p = drop_p
+        self.weight = Parameter(torch.Tensor(self.out_features, in_features))
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        init.xavier_normal(self.weight)
+        if self.bias is not None:
+            self.bias.data.fill_(0.0)
+
+    def forward(self, x):
+        wx = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
+        w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))  # 1*num_classes
+        pro = wx  # batch*num_classes
+
+        x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)  # batch*1
+        wx_pow2 = wx.pow(2)  # batch*num_classes
+        if self.training:
+            x_len_pow2 = x_len_pow2 * (1.0 - self.drop_p)
+
+        dis = torch.sqrt(F.relu(x_len_pow2 - wx_pow2 / w_len_pow2))  # batch*num_classes
+        dis = torch.sign(wx) * (dis - torch.sqrt(x_len_pow2))  # batch*num_classes
+        dis = dis * torch.sqrt(w_len_pow2)
+
+        out = pro - dis
+        if self.bias is not None:
+            out = out + self.bias
+
+        return out
+
+    def extra_repr(self):
+        return 'in_features={}, out_features={}, bias={}'.format(
+            self.in_features, self.out_features, self.bias is not None
+        )
+
 
