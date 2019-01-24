@@ -81,7 +81,7 @@ def lstm_init(lstm_Module):
 
 
 class LayerNormLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, opt, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
+    def __init__(self, input_size, hidden_size, linearprodis, drop_p, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
         super(LayerNormLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -90,8 +90,8 @@ class LayerNormLSTMCell(nn.Module):
         self.norm_output = norm_output
         self.norm_hidden = norm_hidden
 
-        self.ih_linear = nn.Linear(input_size, 4 * hidden_size) if not opt.linearprodis else AttModel.LinearProDis(input_size, 4 * hidden_size, drop_p=opt.drop_prob_fcfeat)
-        self.hh_linear = nn.Linear(hidden_size, 4 * hidden_size) if not opt.linearprodis else AttModel.LinearProDis(hidden_size, 4 * hidden_size, drop_p=opt.drop_prob_attfeat)
+        self.ih_linear = nn.Linear(input_size, 4 * hidden_size) if not linearprodis else AttModel.LinearProDis(input_size, 4 * hidden_size, drop_p=drop_p)
+        self.hh_linear = nn.Linear(hidden_size, 4 * hidden_size) if not linearprodis else AttModel.LinearProDis(hidden_size, 4 * hidden_size)
 
         self.weight_ih = self.ih_linear.weight
         self.weight_hh = self.hh_linear.weight

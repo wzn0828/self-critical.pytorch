@@ -63,7 +63,6 @@ class AttModel(CaptionModel):
         # self.rnn_type = opt.rnn_type
         self.rnn_size = opt.rnn_size
         self.num_layers = opt.num_layers
-        self.drop_attfeat_location = opt.drop_attfeat_location
         self.drop_prob_attfeat = opt.drop_prob_attfeat
         self.drop_prob_fcfeat = opt.drop_prob_fcfeat
         self.drop_prob_embed = opt.drop_prob_embed
@@ -100,7 +99,7 @@ class AttModel(CaptionModel):
                 (nn.Linear(self.att_feat_size, self.encoded_feat_size) if not opt.linearprodis else LinearProDis(self.att_feat_size, self.encoded_feat_size),
                  nn.ReLU(),) +
                 ((nn.BatchNorm1d(self.encoded_feat_size),) if self.use_bn == 2 else ()) +
-                ((nn.Dropout(self.drop_prob_attfeat),) if self.drop_attfeat_location == 'before_attention' else ())))
+                (nn.Dropout(self.drop_prob_attfeat),)))
         # initialization
         nn.init.normal_(self.embed[0].weight, mean=0, std=0.2)
         model_utils.kaiming_normal('relu', 0, filter(lambda x: 'Linear' in str(type(x)), self.fc_embed)[0],
@@ -122,7 +121,7 @@ class AttModel(CaptionModel):
             self.logit = nn.Sequential(
                 *(reduce(lambda x, y: x + y, self.logit) + [nn.Linear(self.rnn_size, self.vocab_size + 1) if not opt.linearprodis else LinearProDis(self.rnn_size, self.vocab_size + 1, drop_p=0.5)]))
 
-        self.ctx2att = nn.Sequential(*((nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0),) +
+        self.ctx2att = nn.Sequential(*((nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat),) +
                                        ((nn.BatchNorm1d(self.att_hid_size),) if opt.BN_other else ())
                                        ))
 
@@ -147,8 +146,8 @@ class AttModel(CaptionModel):
             nn.init.normal_(self.h2t0, mean=0, std=0.1)
             nn.init.normal_(self.c2t0, mean=0, std=0.1)
 
-        self.ctx2att0 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0)
-        self.ctx2att2 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat if opt.drop_attfeat_location == 'before_attention' else 0)
+        self.ctx2att0 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat)
+        self.ctx2att2 = nn.Linear(self.encoded_feat_size, self.att_hid_size) if not opt.linearprodis else LinearProDis(self.encoded_feat_size, self.att_hid_size, drop_p=opt.drop_prob_attfeat)
         model_utils.xavier_normal('linear', self.ctx2att0, self.ctx2att2)
 
         self.save_att_statics = opt.save_att_statics
@@ -692,7 +691,6 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         super(TopDownUpCatWeightedHiddenCore3, self).__init__()
         self.iteration = 0
         self.drop_prob_attfeat = opt.drop_prob_attfeat
-        self.drop_attfeat_location = opt.drop_attfeat_location
         self.drop_prob_rnn1 = opt.drop_prob_rnn1
         self.drop_prob_rnn2 = opt.drop_prob_rnn2
         self.drop_prob_output = opt.drop_prob_output
@@ -721,6 +719,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.att_normalize_rate = opt.att_normalize_rate
         self.encoded_feat_size = opt.encoded_feat_size
         self.att_norm_reg_paras_path = opt.att_norm_reg_paras_path
+        self.drop_prob_attention = opt.drop_prob_attention
 
         if self.noh2pre:
             inputsize = opt.input_encoding_size + opt.encoded_feat_size
@@ -728,8 +727,8 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             inputsize = opt.input_encoding_size + opt.rnn_size + opt.encoded_feat_size
 
         if self.lstm_layer_norm:
-            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, opt, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
-            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, opt, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
+            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, opt.linearprodis, opt.drop_prob_fcfeat, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
+            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, opt.linearprodis, opt.drop_prob_rnn1, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
         else:
             self.att_lstm = nn.LSTMCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
             self.lang_lstm = nn.LSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size)  # h^1_t, \hat v
@@ -1052,8 +1051,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
                 self.att_BN(att)
                 att = (att - self.att_BN.running_mean) / l2_weight + self.att_bias
 
-        if self.drop_attfeat_location == 'after_attention':
-            att = F.dropout(att, self.drop_prob_attfeat, self.training)
+        att = F.dropout(att, self.drop_prob_attention, self.training)
 
         droped_h_att = F.dropout(h_att, self.drop_prob_rnn1, self.training)
         lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
