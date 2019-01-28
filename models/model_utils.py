@@ -81,21 +81,38 @@ def lstm_init(lstm_Module):
 
 
 class LayerNormLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, linearprodis, drop_p, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
+    def __init__(self, input_sizes, hidden_size, linearprodis, drop_ps, layer_norm=True, norm_input=True, norm_output=True, norm_hidden=True):
         super(LayerNormLSTMCell, self).__init__()
-        self.input_size = input_size
+        if not isinstance(input_sizes, list):
+            self.list = False
+            input_sizes = [input_sizes]
+            drop_ps = [drop_ps]
+        else:
+            self.list = True
+
+        self.input_sizes = input_sizes
+        self.drop_ps = drop_ps
         self.hidden_size = hidden_size
         self.layer_norm = layer_norm
         self.norm_input = norm_input
         self.norm_output = norm_output
         self.norm_hidden = norm_hidden
 
-        self.ih_linear = nn.Linear(input_size, 4 * hidden_size) if not linearprodis else AttModel.LinearProDis(input_size, 4 * hidden_size, drop_p=drop_p)
-        self.hh_linear = nn.Linear(hidden_size, 4 * hidden_size) if not linearprodis else AttModel.LinearProDis(hidden_size, 4 * hidden_size)
+        self.ih_linear = nn.ModuleList([nn.Linear(input_sizes[i],
+                                                  4 * hidden_size,
+                                                  bias=i == 0) if not linearprodis else AttModel.LinearProDis(
+            input_sizes[i], 4 * hidden_size, bias=i == 0, drop_p=drop_ps[i])
+                                        for i in range(len(input_sizes))])
 
-        self.weight_ih = self.ih_linear.weight
+        self.hh_linear = nn.Linear(hidden_size, 4 * hidden_size) if not linearprodis else AttModel.LinearProDis(
+            hidden_size, 4 * hidden_size)
+
+        self.weight_ih = Parameter(torch.Tensor(4 * hidden_size, sum(input_sizes)))
+        for i in range(len(input_sizes)):
+            self.ih_linear[i].weight.data = self.weight_ih[:, sum(input_sizes[:i]):sum(input_sizes[:i+1])]
+        self.bias_ih = self.ih_linear[0].bias
+
         self.weight_hh = self.hh_linear.weight
-        self.bias_ih = self.ih_linear.bias
         self.bias_hh = self.hh_linear.bias
 
         if self.layer_norm:
@@ -119,8 +136,14 @@ class LayerNormLSTMCell(nn.Module):
             self.ln_ih = self.ln_hh = self.ln_ho = self.ln_ht = lambda x: x
 
     def forward(self, input, hidden):
+        if not self.list:
+            input = [input]
+
         hx, cx = hidden
-        gates = self.ln_ih(self.ih_linear(input)) + self.ln_hh(self.hh_linear(hx))
+
+        ih = sum([self.ih_linear[i](input[i]) for i in range(len(input))])
+
+        gates = self.ln_ih(ih) + self.ln_hh(self.hh_linear(hx))
 
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 

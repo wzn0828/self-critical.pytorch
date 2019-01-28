@@ -721,15 +721,18 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         self.att_norm_reg_paras_path = opt.att_norm_reg_paras_path
         self.drop_prob_attention = opt.drop_prob_attention
 
-        if self.noh2pre:
-            inputsize = opt.input_encoding_size + opt.encoded_feat_size
-        else:
-            inputsize = opt.input_encoding_size + opt.rnn_size + opt.encoded_feat_size
-
         if self.lstm_layer_norm:
-            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, opt.linearprodis, opt.drop_prob_fcfeat, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
-            self.lang_lstm = model_utils.LayerNormLSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size, opt.linearprodis, opt.drop_prob_rnn1, self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
+            if self.noh2pre:
+                inputsize = [opt.input_encoding_size, opt.encoded_feat_size]
+            else:
+                inputsize = [opt.input_encoding_size, opt.rnn_size, opt.encoded_feat_size]
+            self.att_lstm = model_utils.LayerNormLSTMCell(inputsize, opt.rnn_size, opt.linearprodis, [opt.drop_prob_embed, opt.drop_prob_fcfeat], self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # we, fc, h^2_t-1
+            self.lang_lstm = model_utils.LayerNormLSTMCell([opt.encoded_feat_size, opt.rnn_size], opt.rnn_size, opt.linearprodis, [opt.drop_prob_attention, opt.drop_prob_rnn1], self.layer_norm, self.norm_input, self.norm_output, self.norm_hidden)  # h^1_t, \hat v
         else:
+            if self.noh2pre:
+                inputsize = opt.input_encoding_size + opt.encoded_feat_size
+            else:
+                inputsize = opt.input_encoding_size + opt.rnn_size + opt.encoded_feat_size
             self.att_lstm = nn.LSTMCell(inputsize, opt.rnn_size)  # we, fc, h^2_t-1
             self.lang_lstm = nn.LSTMCell(opt.rnn_size + opt.encoded_feat_size, opt.rnn_size)  # h^1_t, \hat v
 
@@ -959,14 +962,17 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
             fc_feats, weight0 = self.attention0(h1, att_feats, p0_att_feats, att_masks)  # batch_size * rnn_size
 
         if self.noh2pre:
-            att_lstm_input = torch.cat([fc_feats, xt], 1)  # [batch_size, rnn_size + input_encoding_size]
+            if self.lstm_layer_norm:
+                att_lstm_input = [xt, fc_feats]
+            else:
+                att_lstm_input = torch.cat([xt, fc_feats], 1)  # [batch_size, rnn_size + input_encoding_size]
         else:
             if self.pre == 'h':
                 pre = h2
             elif self.pre == 'c':
                 pre = c2
             prev_h = F.dropout(pre, self.drop_prob_rnn1, self.training)  # [batch_size, rnn_size]
-            att_lstm_input = torch.cat([prev_h, fc_feats, xt], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
+            att_lstm_input = torch.cat([xt, prev_h, fc_feats], 1)  # [batch_size, 2*rnn_size + input_encoding_size]
 
         if self.LSTMN:
             if step < 2 or not self.LSTMN_att:
@@ -1054,7 +1060,10 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
         att = F.dropout(att, self.drop_prob_attention, self.training)
 
         droped_h_att = F.dropout(h_att, self.drop_prob_rnn1, self.training)
-        lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
+        if self.lstm_layer_norm:
+            lang_lstm_input = [att, droped_h_att]
+        else:
+            lang_lstm_input = torch.cat([att, droped_h_att], 1)  # batch_size * 2rnn_size
         # lang_lstm_input = torch.cat([att, F.dropout(h_att, self.drop_prob_lm, self.training)], 1) ?????
 
         if self.LSTMN:
