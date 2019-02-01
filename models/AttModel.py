@@ -915,7 +915,7 @@ class TopDownUpCatWeightedHiddenCore3(nn.Module):
 
         # skip connection
         if self.skip_connection is not None and self.skip_connection in ['HW', 'CAT-HW']:
-            self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=False, ele=opt.skip_ele)
+            self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=False, ele=opt.skip_ele, skip_sum_1=opt.skip_sum_1)
         elif self.skip_connection is not None and self.skip_connection in ['HW-normal', 'CAT-HW-normal']:
             self.HW_connection = HW_connection(num_dim=self.rnn_size, opt=opt, normal=True, ele=opt.skip_ele)
         elif self.skip_connection == 'HW_1':
