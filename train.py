@@ -394,7 +394,7 @@ def train(opt):
                     tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
                     tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
 
-        if opt.tensorboard_buffers and (iteration % (8 * opt.losses_log_every) == 0):
+        if opt.tensorboard_buffers and (iteration % (opt.losses_log_every) == 0):
             for name, buffer in model.named_buffers():
                 if (opt.tensorboard_buffers_name is None or sum([p_name in name for p_name in opt.tensorboard_buffers_name]) > 0) and buffer is not None:
                     add_summary_value(tb_summary_writer, name.replace('.', '/'), buffer, iteration)
