@@ -2597,13 +2597,13 @@ class LinearProDis(nn.Module):
         x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)  # batch*1
 
         wx_len_pow_2 = torch.matmul(x_len_pow2, w_len_pow2)  # batch*num_classes
-        wx_len = torch.sqrt(wx_len_pow_2)
+        wx_len = torch.sqrt(torch.max(wx_len_pow_2, torch.zeros_like(wx_len_pow_2)))
 
         dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(pro_pow2)))  # batch*num_classes
         dis = torch.sign(pro) * (wx_len - dis_)  # batch*num_classes
 
-        a_1 = dis_.detach() / wx_len.detach()
-        a_2 = torch.abs(pro).detach() / wx_len.detach()
+        a_1 = dis_.detach() / (wx_len.detach() + 1e-15)
+        a_2 = torch.abs(pro).detach() / (wx_len.detach() + 1e-15)
         self.a1_min = a_1.min(dim=1)[0].mean()
         self.a2_max = a_2.max(dim=1)[0].mean()
 
