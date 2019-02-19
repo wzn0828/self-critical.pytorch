@@ -200,10 +200,10 @@ class AttModel(CaptionModel):
         att_feats = pack_wrapper(self.att_embed, att_feats, att_masks)
 
         # Project the attention feats first to reduce memory and computation comsumptions.
-        # p_att_feats = self.ctx2att(att_feats)
         p_att_feats = pack_wrapper(self.ctx2att, att_feats, att_masks)
-        p0_att_feats = self.ctx2att0(att_feats)
-        p2_att_feats = self.ctx2att2(att_feats)
+
+        p0_att_feats = pack_wrapper(self.ctx2att0, att_feats, att_masks)
+        p2_att_feats = pack_wrapper(self.ctx2att2, att_feats, att_masks)
 
         att_masks_expand = att_masks.unsqueeze(2).expand_as(att_feats)
         att_feats_masked = att_feats * att_masks_expand
