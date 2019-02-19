@@ -2566,6 +2566,8 @@ class LinearCapsPro(nn.Module):
 
 
 class LinearProDis(nn.Module):
+    prodis_method = ''
+
     def __init__(self, in_features, out_features, bias=True, drop_p=0.0):
         super(LinearProDis, self).__init__()
         self.in_features = in_features
@@ -2579,26 +2581,39 @@ class LinearProDis(nn.Module):
 
         self.reset_parameters()
 
+        self.register_buffer('a1_min', torch.zeros(1))
+        self.register_buffer('a2_max', torch.zeros(1))
+
     def reset_parameters(self):
         init.xavier_normal_(self.weight)
         if self.bias is not None:
             self.bias.data.fill_(0.0)
 
     def forward(self, x):
-        wx = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
+        pro = torch.matmul(x, torch.t(self.weight))  # batch*num_classes
+        pro_pow2 = pro.pow(2)  # batch*num_classes
+
         w_len_pow2 = torch.t(self.weight.pow(2).sum(dim=1, keepdim=True))  # 1*num_classes
-        pro = wx  # batch*num_classes
-
         x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)  # batch*1
-        wx_pow2 = wx.pow(2)  # batch*num_classes
-        if self.training:
-            x_len_pow2 = x_len_pow2 * (1.0 - self.drop_p)
 
-        dis = torch.sqrt(F.relu(x_len_pow2 - wx_pow2 / w_len_pow2))  # batch*num_classes
-        dis = torch.sign(wx) * (dis - torch.sqrt(x_len_pow2))  # batch*num_classes
-        dis = dis * torch.sqrt(w_len_pow2)
+        wx_len_pow_2 = torch.matmul(x_len_pow2, w_len_pow2)  # batch*num_classes
+        wx_len = torch.sqrt(wx_len_pow_2)
 
-        out = pro - dis
+        dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(pro_pow2)))  # batch*num_classes
+        dis = torch.sign(pro) * (wx_len - dis_)  # batch*num_classes
+
+        a_1 = dis_.detach() / wx_len.detach()
+        a_2 = torch.abs(pro).detach() / wx_len.detach()
+        self.a1_min = a_1.min(dim=1)[0].mean()
+        self.a2_max = a_2.max(dim=1)[0].mean()
+
+        if self.prodis_method == 'pro':
+            out = pro
+        elif self.prodis_method == 'dis':
+            out = dis
+        elif self.prodis_method == 'a1*pro+a2*dis':
+            out = a_1 * pro + a_2 * dis
+
         if self.bias is not None:
             out = out + self.bias
 
