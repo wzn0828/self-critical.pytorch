@@ -393,6 +393,12 @@ def train(opt):
                 if (opt.tensorboard_parameters_name is None or sum([p_name in name for p_name in opt.tensorboard_parameters_name]) > 0) and param.grad is not None:
                     tb_summary_writer.add_histogram('Weights_' + name.replace('.', '/'), param, iteration)
                     tb_summary_writer.add_histogram('Grads_' + name.replace('.', '/'), param.grad, iteration)
+
+        if opt.tensorboard_buffers and (iteration % (8 * opt.losses_log_every) == 0):
+            for name, buffer in model.named_buffers():
+                if (opt.tensorboard_buffers_name is None or sum([p_name in name for p_name in opt.tensorboard_buffers_name]) > 0) and buffer is not None:
+                    add_summary_value(tb_summary_writer, name.replace('.', '/'), buffer, iteration)
+
         if opt.distance_sensitive_coefficient and iteration % (4 * opt.losses_log_every) == 0:
                 print('The coefficient in intra_att_att_lstm is as follows:')
                 print(model.core.intra_att_att_lstm.coefficient.data.cpu().tolist())
