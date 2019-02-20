@@ -2572,7 +2572,7 @@ class LinearProDis(nn.Module):
         super(LinearProDis, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.drop_p = drop_p
+        # self.drop_p = drop_p
         self.weight = Parameter(torch.Tensor(self.out_features, in_features))
         if bias:
             self.bias = Parameter(torch.Tensor(out_features))
@@ -2599,23 +2599,31 @@ class LinearProDis(nn.Module):
         wx_len_pow_2 = torch.matmul(x_len_pow2, w_len_pow2)  # batch*num_classes
         wx_len = torch.sqrt(torch.max(wx_len_pow_2, torch.zeros_like(wx_len_pow_2)))
 
-        dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(pro_pow2)))  # batch*num_classes
-        dis = torch.sign(pro) * (wx_len - dis_)  # batch*num_classes
+        dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(wx_len_pow_2)))  # batch*num_classes
+        dis = wx_len - dis_  # batch*num_classes
 
-        a_1 = dis_.detach() / (wx_len.detach() + 1e-15)
-        a_2 = torch.abs(pro).detach() / (wx_len.detach() + 1e-15)
-        self.a1_min = a_1.min(dim=1)[0].mean()
-        self.a2_max = a_2.max(dim=1)[0].mean()
+        wx_len_detach = wx_len.detach()
+        a_1 = dis_.detach() / (wx_len_detach + 1e-15)
+        a_2 = pro.detach() / (wx_len_detach + 1e-15)
 
         if self.prodis_method == 'pro':
             out = pro
         elif self.prodis_method == 'dis':
+            dis = torch.sign(pro) * dis  # batch*num_classes
             out = dis
-        elif self.prodis_method == 'a1*pro+a2*dis':
+        elif self.prodis_method == 'adaptive-prodis':
             out = a_1 * pro + a_2 * dis
+        elif self.prodis_method == 'adaptive-prodis-detach':
+            dis = wx_len.detach() - dis_  # batch*num_classes
+            out = a_1 * pro + a_2 * dis
+
+        self.a1_min = a_1.min(dim=1)[0].mean()
+        self.a2_max = torch.abs(a_2).max(dim=1)[0].mean()
 
         if self.bias is not None:
             out = out + self.bias
+
+        del wx_len_detach
 
         return out
 
