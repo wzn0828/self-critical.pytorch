@@ -293,7 +293,10 @@ def train(opt):
                     decay_factor = opt.learning_rate_decay_rate ** frac
                     opt.current_lr = opt.learning_rate * decay_factor
                 elif opt.lr_decay == 'cosine':
-                    opt.current_lr = opt.learning_rate * (1 + math.cos(math.pi * epoch / opt.lr_max_epoch)) / 2
+                    lr_epoch = min(epoch, opt.lr_max_epoch)
+                    cosine_decay = 0.5 * (1 + math.cos(math.pi * lr_epoch / opt.lr_max_epoch))
+                    decay_factor = (1 - 0.01) * cosine_decay + 0.01
+                    opt.current_lr = opt.learning_rate * decay_factor
             else:
                 opt.current_lr = opt.learning_rate
 
