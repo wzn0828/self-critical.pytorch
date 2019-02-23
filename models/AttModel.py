@@ -2581,8 +2581,8 @@ class LinearProDis(nn.Module):
 
         self.reset_parameters()
 
-        self.register_buffer('a1_min', torch.zeros(1))
-        self.register_buffer('a2_max', torch.zeros(1))
+        self.register_buffer('a1_min', torch.tensor(0.))
+        self.register_buffer('a2_max', torch.tensor(0.))
 
     def reset_parameters(self):
         init.xavier_normal_(self.weight)
