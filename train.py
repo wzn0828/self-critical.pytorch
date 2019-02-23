@@ -295,7 +295,7 @@ def train(opt):
                 elif opt.lr_decay == 'cosine':
                     lr_epoch = min((epoch-opt.learning_rate_decay_start), opt.lr_max_epoch)
                     cosine_decay = 0.5 * (1 + math.cos(math.pi * lr_epoch / opt.lr_max_epoch))
-                    decay_factor = (1 - 0.01) * cosine_decay + 0.01
+                    decay_factor = (1 - opt.lr_cosine_decay_base) * cosine_decay + opt.lr_cosine_decay_base
                     opt.current_lr = opt.learning_rate * decay_factor
             else:
                 opt.current_lr = opt.learning_rate
