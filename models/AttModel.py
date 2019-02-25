@@ -2597,14 +2597,18 @@ class LinearProDis(nn.Module):
         x_len_pow2 = x.pow(2).sum(dim=1, keepdim=True)  # batch*1
 
         wx_len_pow_2 = torch.matmul(x_len_pow2, w_len_pow2)  # batch*num_classes
-        wx_len = torch.sqrt(torch.max(wx_len_pow_2, torch.zeros_like(wx_len_pow_2)))
+        del w_len_pow2
 
-        dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(wx_len_pow_2)))  # batch*num_classes
+        dis_ = torch.sqrt(torch.max(wx_len_pow_2 - pro_pow2, torch.zeros_like(x_len_pow2)))  # batch*num_classes
+        wx_len = torch.sqrt(torch.max(wx_len_pow_2, torch.zeros_like(x_len_pow2)))
+        del x_len_pow2, pro_pow2, wx_len_pow_2
         dis = wx_len - dis_  # batch*num_classes
 
         wx_len_detach = wx_len.detach()
         a_1 = dis_.detach() / (wx_len_detach + 1e-15)
+        del dis_, wx_len
         a_2 = pro.detach() / (wx_len_detach + 1e-15)
+        del wx_len_detach
 
         if self.prodis_method == 'pro':
             out = pro
@@ -2613,9 +2617,8 @@ class LinearProDis(nn.Module):
             out = dis
         elif self.prodis_method == 'adaptive-prodis':
             out = a_1 * pro + a_2 * dis
-        elif self.prodis_method == 'adaptive-prodis-detach':
-            dis = wx_len.detach() - dis_  # batch*num_classes
-            out = a_1 * pro + a_2 * dis
+
+        del dis, pro
 
         self.a1_min = a_1.min(dim=1)[0].mean()
         self.a2_max = torch.abs(a_2).max(dim=1)[0].mean()
@@ -2623,7 +2626,7 @@ class LinearProDis(nn.Module):
         if self.bias is not None:
             out = out + self.bias
 
-        del wx_len_detach
+        del a_1, a_2
 
         return out
 
