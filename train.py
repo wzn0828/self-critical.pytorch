@@ -248,9 +248,11 @@ def train(opt):
 
     iteration = infos.get('iter', 0)
     epoch = infos.get('epoch', 0)
+    if opt.learning_rate_decay_start is None:
+        opt.learning_rate_decay_start = infos.get('opt', None).learning_rate_decay_start
     # if opt.load_best:
     #     opt.self_critical_after = epoch
-    if opt.learning_rate_decay_start is None and opt.self_critical_after != -1 and epoch >= opt.self_critical_after:
+    elif opt.learning_rate_decay_start == -1 and opt.self_critical_after != -1 and epoch >= opt.self_critical_after:
         opt.learning_rate_decay_start = epoch
 
     val_result_history = histories.get('val_result_history', {})
