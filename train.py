@@ -73,37 +73,40 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
     load_params(model, avg_param)  # load the average
 
     # eval model on training data
-    eval_kwargs = {'split': opt.train_eval_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write train_eval result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/train_ave_model', train_eval_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
+    if opt.train_eval_split is not None:
+        eval_kwargs = {'split': opt.train_eval_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write train_eval result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/train_ave_model', train_eval_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/train_ave_model', v, iteration)
 
     # eval model on valid data
-    eval_kwargs = {'split': opt.val_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write validation result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/val_ave_model', val_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
+    if opt.val_split is not None:
+        eval_kwargs = {'split': opt.val_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write validation result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/val_ave_model', val_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/val_ave_model', v, iteration)
 
     # eval model on test data
-    eval_kwargs = {'split': opt.test_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write validation result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/test_ave_model', val_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/test_ave_model', v, iteration)
+    if opt.test_split is not None:
+        eval_kwargs = {'split': opt.test_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write validation result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/test_ave_model', val_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/test_ave_model', v, iteration)
 
     # Save model if is improving on validation result
     if opt.language_eval == 1:
@@ -134,39 +137,42 @@ def eva_ave_model(avg_param, best_val_score_ave_model, crit, infos, iteration, l
 def eva_original_model(best_val_score, crit, epoch, histories, infos, iteration, loader, loss_history, lr_history, model, opt,
                        optimizer, ss_prob_history, tb_summary_writer, val_result_history):
     # eval model on training data
-    eval_kwargs = {'split': opt.train_eval_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write train_eval result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/train', v, iteration)
+    if opt.train_eval_split is not None:
+        eval_kwargs = {'split': opt.train_eval_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        train_eval_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write train_eval result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/train', train_eval_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/train', v, iteration)
 
     # eval model on valid data
-    eval_kwargs = {'split': opt.val_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write validation result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/val', v, iteration)
-    # val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
+    if opt.val_split is not None:
+        eval_kwargs = {'split': opt.val_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write validation result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/val', val_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/val', v, iteration)
+        val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
 
     # eval model on test data
-    eval_kwargs = {'split': opt.test_split,
-                   'dataset': opt.input_json}
-    eval_kwargs.update(vars(opt))
-    val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
-    # Write validation result into summary
-    add_summary_value(tb_summary_writer, 'validation_loss/test', val_loss, iteration)
-    if lang_stats is not None:
-        for k, v in lang_stats.items():
-            add_summary_value(tb_summary_writer, k + '/test', v, iteration)
-    val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
+    if opt.test_split is not None:
+        eval_kwargs = {'split': opt.test_split,
+                       'dataset': opt.input_json}
+        eval_kwargs.update(vars(opt))
+        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        # Write validation result into summary
+        add_summary_value(tb_summary_writer, 'validation_loss/test', val_loss, iteration)
+        if lang_stats is not None:
+            for k, v in lang_stats.items():
+                add_summary_value(tb_summary_writer, k + '/test', v, iteration)
+        val_result_history[iteration] = {'loss': val_loss, 'lang_stats': lang_stats, 'predictions': predictions}
 
 
     # Save model if is improving on validation result
