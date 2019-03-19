@@ -286,7 +286,7 @@ def train(opt):
     optimizer = build_optimizer(model, opt)
 
     # Load the optimizer
-    if vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
+    if opt.load_opti and vars(opt).get('start_from', None) is not None and opt.load_best==0 and os.path.isfile(os.path.join(opt.start_from, "optimizer.pth")):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
 
     # initialize the running average of parameters
