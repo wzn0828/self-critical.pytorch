@@ -99,7 +99,7 @@ class DataLoader(data.Dataset):
             if img['id'] in self.specified_id:
                 self.split_ix['specified'].append(ix)
 
-        self.split_ix['online_val'] = train_eval[-1000:]
+        self.split_ix['online_val'] = self.split_ix['val'][-2000:]
         self.split_ix['raw_train'] = list(set(self.split_ix['raw_train']) - set(self.split_ix['online_val']))
 
         # subset for evaluation of train data
