@@ -292,6 +292,12 @@ def train(opt):
     # initialize the running average of parameters
     avg_param = deepcopy(list(p.data for p in model.parameters()))
 
+    # make evaluation using original model
+    best_val_score, histories, infos = eva_original_model(best_val_score, crit, epoch, histories, infos, iteration,
+                                                              loader, loss_history, lr_history,
+                                                              model, opt, optimizer, ss_prob_history, tb_summary_writer,
+                                                              val_result_history)
+
     while True:
         if update_lr_flag:
             # Assign the learning rate
