@@ -139,9 +139,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # ----for my local set----#
-    args.input_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/dataset_coco.json'
-    args.dict_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/cocotalk.json'
-    args.output_pkl = '/home/wzn/PycharmProjects/self-critical.pytorch/data/coco-train'
+    args.input_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/dataset_flickr8k.json'
+    args.dict_json = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/flickr8k_talk.json'
+    args.output_pkl = '/home/wzn/PycharmProjects/self-critical.pytorch/data/FLICKR8K/flickr8k-train'
     args.split = 'train'
 
     # ----for my local set----#

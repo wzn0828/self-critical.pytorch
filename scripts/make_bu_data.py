@@ -24,11 +24,9 @@ csv.field_size_limit(sys.maxsize)
 FIELDNAMES = ['image_id', 'image_w','image_h','num_boxes', 'boxes', 'features']
 
 #----for my local set----#
-infiles = ['test2014_resnet101_faster_rcnn_genome.tsv.0',
-          'test2014_resnet101_faster_rcnn_genome.tsv.1',\
-          'test2014_resnet101_faster_rcnn_genome.tsv.2']
-args.downloaded_feats = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100'
-args.output_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test'
+infiles = ['flickr8k.tsv']
+args.downloaded_feats = '/home/wzn/Datasets/ImageCaption/Flickr8k'
+args.output_dir = '/home/wzn/Datasets/ImageCaption/Flickr8k/detection_features/features'
 #----for my local set----#
 
 if not os.path.exists(args.output_dir+'_att'):

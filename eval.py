@@ -60,9 +60,9 @@ parser.add_argument('--temperature', type=float, default=1.0,
 parser.add_argument('--decoding_constraint', type=int, default=0,
                 help='If 1, not allowing same word in a row')
 # For evaluation on a folder of images:
-parser.add_argument('--image_folder', type=str, default='', 
+parser.add_argument('--image_folder', type=str, default='',
                 help='If this is nonempty then will predict on the images in this folder path')
-parser.add_argument('--image_root', type=str, default='', 
+parser.add_argument('--image_root', type=str, default='',
                 help='In case the image paths have to be preprended with a root path to an image folder')
 # For evaluation on MSCOCO images from some split:
 parser.add_argument('--input_fc_dir', type=str, default='',
@@ -73,56 +73,41 @@ parser.add_argument('--input_box_dir', type=str, default='',
                 help='path to the h5file containing the preprocessed dataset')
 parser.add_argument('--input_label_h5', type=str, default='',
                 help='path to the h5file containing the preprocessed dataset')
-parser.add_argument('--input_json', type=str, default='', 
+parser.add_argument('--input_json', type=str, default='',
                 help='path to the json file containing additional info and vocab. empty = fetch from model checkpoint.')
-parser.add_argument('--split', type=str, default='test', 
+parser.add_argument('--split', type=str, default='test',
                 help='if running on MSCOCO images, which split to use: val|test|train')
-parser.add_argument('--coco_json', type=str, default='', 
+parser.add_argument('--coco_json', type=str, default='',
                 help='if nonempty then use this file in DataLoaderRaw (see docs there). Used only in MSCOCO test evaluation, where we have a specific json file of only test set images.')
 # misc
-parser.add_argument('--id', type=str, default='', 
+parser.add_argument('--id', type=str, default='',
                 help='an id identifying this run/job. used only if language_eval = 1 for appending to intermediate files')
-parser.add_argument('--verbose_beam', type=int, default=1, 
+parser.add_argument('--verbose_beam', type=int, default=1,
                 help='if we need to print out all beam search beams.')
-parser.add_argument('--verbose_loss', type=int, default=0, 
+parser.add_argument('--verbose_loss', type=int, default=0,
                 help='if we need to calculate loss.')
 
 opt = parser.parse_args()
 
 # ----- for my local set ----- #
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 opt.dump_images = 0
 opt.num_images = -1
-opt.model = 'Experiments/Visualized/BUTD-XE_Noh2pre/model.pth'
-opt.infos_path = 'Experiments/Visualized/BUTD-XE_Noh2pre/infos_BUTD-XE_Noh2pre.pkl'
-opt.language_eval = 1
-opt.beam_size = 1
-opt.batch_size = 64
-
-opt.input_feature = 'fc'
-opt.pre = 'h'
-opt.output_attention = False
-opt.save_att_statics = True
-
-opt.att_statics_numfeat_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/train_att_statics_numboxes.npy'
-opt.att_statics_weights_l2_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/train_att_statics_l2weight_e3.npy'
-
-opt.dim_att_statics_numfeat_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/dim_train_att_statics_numboxes.npy'
-opt.dim_att_statics_weights_l2_path = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/dim_train_att_statics_l2weight_e3.npy'
-
-opt.specified_id=[]
-opt.dataset='coco'
-opt.annfile = '/home/wzn/PycharmProjects/self-critical.pytorch/coco-caption/annotations/captions_val2014.json'
-opt.input_json = 'data/MSCOCO/cocotalk.json'
-opt.input_label_h5 = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/cocotalk_label.h5'
-opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
-opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
+opt.model = 'Experiments/Experiments_hdd/Visualized/BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online6/model-best.pth'
+opt.infos_path = 'Experiments/Experiments_hdd/Visualized/BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online6/infos_BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online6-best.pkl'
+opt.language_eval = 0
+opt.beam_size = 5
+opt.batch_size = 128
 
 # opt.print_lang_weights = True
-opt.testOrnot = False
+opt.testOrnot = True
 
 # opt.specified_id = [88652, 46775]
-opt.split = 'train'   # 'specified'
+opt.split = 'onlinetest'   # 'specified'
+
+if opt.split == 'onlinetest':
+    opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_fc'
+    opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/test2014_20-100/test_att'
 
 cache_path = os.path.join('vis', str(opt.num_images))
 
@@ -148,7 +133,7 @@ if opt.batch_size == 0:
     opt.batch_size = infos['opt'].batch_size
 if len(opt.id) == 0:
     opt.id = infos['opt'].id
-ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval", 'input_label_h5',"input_fc_dir", "input_att_dir", "input_json",'input_box_dir']
+ignore = ["id", "batch_size", 'drop_prob_output',"beam_size", "start_from", "language_eval", 'input_label_h5',"input_fc_dir", "input_att_dir", "input_json",'input_box_dir']
 for k in vars(infos['opt']).keys():
     if k not in ignore:
         if k in vars(opt):
@@ -159,8 +144,14 @@ for k in vars(infos['opt']).keys():
 vocab = infos['vocab'] # ix -> word mapping
 
 # Setup the model
-model = models.setup(opt)
-model.load_state_dict(torch.load(opt.model))
+model = models.setup(infos['opt'])
+models.LinearProDis.prodis_method = infos['opt'].prodis_method
+
+dict = torch.load(opt.model)
+# dict['core.att_linear_project.bias']=dict.pop('core.att_bias')
+# dict['core.att_linear_project.weight']=dict.pop('core.att_weight')
+model.load_state_dict(dict)
+
 model.cuda()
 # model = torch.nn.DataParallel(model)
 model.eval()
@@ -168,7 +159,7 @@ crit = utils.LanguageModelCriterion()
 
 # Create the Data Loader instance
 if len(opt.image_folder) == 0:
-    if opt.testOrnot:
+    if opt.split == 'onlinetest':
         loader = DataLoaderTest(opt)
     else:
         loader = DataLoader(opt)
@@ -214,5 +205,5 @@ if opt.dump_json == 1:
         split = 'val'
     else:
         split = opt.split
-    cache_path = os.path.join(cache_path, 'captions_%s2014_LanguageAttention_results'%split + '.json')
+    cache_path = os.path.join(cache_path, 'captions_%s2014_PR-Net-6_results'%split + '.json')
     json.dump(split_predictions, open(cache_path, 'w'))

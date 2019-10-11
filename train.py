@@ -467,50 +467,174 @@ def build_optimizer(model, opt):
 opt = opts.parse_opt()
 
 #----for my local set----#
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-os.environ["OMP_NUM_THREADS"] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+seed = 123
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+
 # net
-opt.id = 'BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
+opt.id = 'BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online7'
 opt.caption_model = 'topdown_up_cat_weighted_hidden_3'
-opt.rnn_size = 512
+opt.encoded_feat_size = 512
 opt.input_encoding_size = 512
-opt.drop_prob_lm = 0
-opt.drop_prob_rnn = 0
+opt.rnn_size = 512
+opt.drop_prob_embed = 0
+opt.drop_prob_fcfeat = 0.3
+opt.drop_prob_attfeat = 0.3
+opt.drop_prob_rnn1 = 0
+opt.drop_prob_rnn2 = 0
+opt.drop_prob_output = 0.3
+opt.drop_prob_attention = 0
+
 opt.use_bn = 2
 opt.fc_use_bn = 2
-opt.drop_prob_output = 0.2
+opt.emb_use_bn = 0
+opt.BN_other = False
 
-opt.nonlinear = 'tanh'   # relu, prelu, lecun_tanh, maxout, tanh
+opt.load_best = 0
+opt.self_critical_after = 0
+opt.start_from = 'Experiments/Experiments_hdd/Visualized/BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online7'
+
+opt.cappro = False
+opt.cappro_method = 'dis'       #  'pro', 'dis', 'pro-dis'
+opt.cappro_pro_normal = False
+opt.cappro_dis_normal = False
+
+opt.linearprodis = True
+opt.prodis_method = 'adaptive-prodis'           # pro, dis, adaptive-prodis, adaptive-prodis-detach
+
+opt.visatt_RMSfilter = False
+opt.visatt_RMSfilter_sum1 = False
+
+opt.save_att_statics = False
+
+opt.att_normalize_method = None      # '1', '2', '3', None
+opt.fc_normalize_method = None
+opt.att_std_weight_init = 0.25
+opt.att_std_bias_init = 0.15
+opt.att_normalize_rate = 1
+opt.lr_ratio = 15
+opt.att_norm_reg_paras_path = None
+
+opt.tensorboard_lang_weights = False
+opt.tensorboard_weights_grads = True
+opt.tensorboard_parameters_name = ['logit.weight', 'att_lstm.weight_ih', 'att_lstm.weight_hh', 'lang_lstm.weight_ih',
+                                   'lang_lstm.weight_hh', 'fc_embed.1.weight', 'att_embed.1.weight']
+opt.tensorboard_buffers = True
+opt.tensorboard_buffers_name = ['a1_min', 'a2_max']
+opt.tensorboard_mid_variables = False
+opt.print_lang_weights = False
+
+opt.nonlinear = 'tanh'   # relu, prelu, lecun_tanh, maxout, tanh,
 opt.sentinel_nonlinear = 'x'    # relu, prelu, lecun_tanh, maxout, tanh, x
+
+opt.noh2pre = True
+opt.pre = 'h'   # h or c
+
+opt.input_feature = 'fc'        # fc, att_mean, attention
+
+opt.output_attention = False
+
+opt.nonlocal_dy = False
+opt.project_g = False
+opt.nonlocal_residual = False
+opt.nonlocal_dy_bn = False
+opt.nonlocal_dy_insert = False
+
+opt.language_attention = False
 opt.weighted_hidden = True
+opt.transfer_horizontal = False
+opt.att_score_method = 'general'    # mlp, dot, general, cosine, scaled_dot
+opt.lang_no_h0 = False   # language attention use or not h0
+opt.Intergrate2vector = 'concat'    # concat, self_attention, self_attention_tying_alpha
+opt.Intergrate_instead = True
+opt.lang_att_before_pro = True      # if true, use language attention on h_lang, otherwise, on projected h_lang
 
-opt.ave_threshold = 130000
+opt.emb_relu = False
 
-opt.load_best = 1
-opt.start_from = '/home/wzn/PycharmProjects/self-critical.pytorch/Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
+opt.tie_weights = False
+
+opt.project_hidden = True
+
+opt.attention_gate = False
+
+opt.skip_connection = None    # 'RES' ,'CAT', ['HW', 'HW-normal', 'HW_1', 'HW_1-normal', 'HW-softmax']
+opt.skip_ele = False
+opt.skip_sum_1 = False
+
+opt.LSTMN = True
+opt.LSTMN_att = False
+opt.LSTMN_att_att_score_method = 'mlp'      # only mlp
+opt.LSTMN_lang = False
+opt.LSTMN_lang_att_score_method = 'general'     # mlp, general, scaled_dot
+opt.LSTMN_last_att_hidden = False
+opt.LSTM_att_hi = False
+opt.adaptive_t0 = False
+opt.LSTMN_att_key_hi_ci = 0         # 0 indicates 'hi', 1 indicates 'ci'
+opt.input_first_att = 2             # 1: only word embedding, 2: 1 + last h_2_t-1, 3: 2 + global_fc
+opt.input_second_att = 1            # 1: only hidden state of the first lstm, 2: 1 + attended visual feature
+
+opt.lstm_layer_norm = True
+opt.layer_norm = False
+opt.norm_input = False
+opt.norm_output = False
+opt.norm_hidden = False
+
+opt.LN_out_embedding = False
+
+opt.not_use_first = False  # LSTMN use or not first timestep
+
+opt.position_sentive_inter = False
+
+opt.word_sensitive_bias = False
+opt.word_sensitive_coefficient = False
+opt.word_sensitive_hi_xi = 0
+
+opt.distance_sensitive_bias = False
+opt.distance_bias_9_1 = False
+opt.distance_sensitive_coefficient = False
 
 # data
-opt.input_json = 'data/cocotalk.json'
+opt.specified_id = []
+opt.dataset = 'coco'
+opt.annfile = '/home/wzn/PycharmProjects/self-critical.pytorch/coco-caption/annotations/captions_val2014.json'
+opt.input_json = 'data/MSCOCO/cocotalk.json'
 opt.input_fc_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_fc'
 opt.input_att_dir = '/home/wzn/Datasets/ImageCaption/MSCOCO/detection_features/trainval_20-100/trainval_att'
-opt.input_label_h5 = 'data/cocotalk_label.h5'
+opt.input_label_h5 = 'data/MSCOCO/cocotalk_label.h5'
+opt.cached_tokens = '/home/wzn/PycharmProjects/self-critical.pytorch/data/MSCOCO/coco-train-idxs.p'
+opt.train_split = 'raw_train'
+opt.train_eval_split = None
+opt.val_split = 'online_val'
+opt.test_split = None
 
 # optimization
-opt.batch_size = 10
+opt.load_opti = False
+opt.lr_decay = 'cosine'        # 'exp', 'cosine'
+opt.lr_max_epoch = 35
+opt.lr_cosine_decay_base = 0.05
+opt.batch_size = 64
 opt.optim = 'adam'
-opt.learning_rate = 5e-4
-opt.learning_rate_decay_start = 0
+opt.learning_rate = 2e-5
+opt.learning_rate_decay_start = -1
+opt.learning_rate_decay_every = 10
 opt.optim_alpha = 0.9
-opt.max_iter = 150000
+opt.max_iter = 600000
 opt.beam_size = 5
+opt.ave_threshold = 600000
+opt.XE_eps = 0
 
-opt.checkpoint_path = 'Experiments/BUTD-B64-UpCWH_3-D0.2-Sen_x-RL-Online-avemodelbest-D0'
-#opt.scheduled_sampling_start = 0
+opt.checkpoint_path = 'Experiments/Experiments_hdd/Visualized/BUTD-RL_cosine50-lrdecay_lstm_adaptive-prodis_online7'
+# opt.scheduled_sampling_start = 0
 opt.save_checkpoint_every = 6000
-opt.val_images_use = -1
-opt.train_eval_images_use = 1280
-#opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
+opt.val_images_use = 2000
+opt.test_images_use = 5000
+opt.train_eval_images_use = 4000
+opt.max_epochs = math.ceil(float(opt.max_iter)/(113287/opt.batch_size))
 opt.language_eval = 1
+
+models.LinearProDis.prodis_method = opt.prodis_method
 #----for my local set----#
 
 train(opt)
